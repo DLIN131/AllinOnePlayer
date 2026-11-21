@@ -1,0 +1,20 @@
+{
+  "name": "allinoneplayer-desktop",
+  "productName": "AllinOnePlayer",
+  "version": "1.0.0",
+  "description": "影片＋漫畫整合播放／閱讀器（電腦版）",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "pack": "node pack.js"
+  },
+  "dependencies": {
+    "ffmpeg-static": "5.3.0",
+    "hls.js": "1.5.17"
+  },
+  "devDependencies": {
+    "@electron/packager": "18.4.4",
+    "electron": "33.4.11"
+  }
+}

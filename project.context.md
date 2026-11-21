@@ -42,9 +42,18 @@
   手機底部 5 分頁（首頁／來源／搜尋／收藏／我的），電視左側選單（移到就切換），電視尺寸以 960×540dp 設計。
   `Tap` 元件 = 可點也可遙控器選（選到時白框＋放大，不改排版）。
 
-### 電腦版（`desktop/`，Electron）
+### 電腦版（`desktop/`，Electron 33）
 
-（建置中）
+- 主程序以 ComicHub 電腦版為底（`state.js` 紀錄檔＋備份、`watchdog.js` 黑畫面自救、`updater.js` original-fs 更新、`library.js` 書櫃 cbz://、`backup.js`、`paths.js` 資料放 exe 旁），
+  加上 MPlayer 電腦版的影片下載（`video-downloads.js`：HLS 片段 → ffmpeg 轉 MP4、MP4 續傳）和 VidHub 的 PNG 拆包協定。
+- `fetcher.js`：每站一個 partition（`persist:<代號>`），一律用 Chromium（`session.fetch`；Node 的 https 會被 CDN 依 TLS 指紋擋）。
+  被驗證擋就用隱藏視窗載入真的網頁，15 秒還在驗證頁就顯示給使用者點。`get(site, url, {api})`：網站 JSON API（XSRF、X-Requested-With、Origin）。
+  影片：`registerMedia` 登記正在播放的影片要帶的標頭，播放期間頁面的影片／XHR 請求都補上（分段可能在別台主機），並把 CORS 改成允許（頁面是 file://）；
+  下載在主程序直接帶標頭（`mediaFetch`）。`vh://` 協定代理有 PNG 包裝的串流。`registerSchemesAsPrivileged` 只能呼叫一次：vh 和 cbz 一起在 `fetcher.registerScheme`。
+- IPC：`net:*`、`auth:*`（漫畫站開登入視窗；jm 可選擇讓程式記住密碼自動重登）、`cbz:*`（漫畫下載寫檔）、`vdl:*`（影片下載）、`lib:*`（書櫃）。
+- 頁面（`src/`，ES module，沒有框架）：`sources/*.js` 七個來源（格式跟 Dart 版相同）、`app.js` 左側選單＋頁面堆疊、`ui/player.js`（hls.js / <video>，鍵盤操作）、
+  `ui/reader.js`（直向／翻頁、canvas 還原切條）、`comic-downloader.js`（逐張送主程序寫 CBZ）、`ui/dom.js` 元件。圖示是 Lucide 字型（跟手機版同一套）。
+  注意：`dom.js` 把 replaceChildren / append 改成會略過 null（畫面上很多「有才放」的元素）。
 
 ## 測試
 
@@ -52,7 +61,9 @@
 - `LIVE=1 flutter test test/live_test.dart`：連真的網站測 vc / nh / wn / eh（有 Cloudflare 的站一般 HTTP 連不上，不在這裡測）。
 - `SHOTS=1 FONT=<中文字型> OUT=<資料夾> flutter test test/shots_test.dart`：用真資料把主要畫面畫成 PNG（手機 411×891、電視 960×540）。
 - Android：`flutter build apk --flavor phone|tv --release`。
+- 電腦版：scratchpad 的 Electron 測試程式（`AIO_TEST=1` 不顯示視窗，移到畫面外截圖，userData/downloads 用暫存資料夾），用真的網站測首頁、作品頁、三站播放、四站閱讀、影片與漫畫下載。不要開打包後的 exe 測試。
 
 ## 版本紀錄
 
-- v1.0.1（2026-11-21）：第一版。手機／電視 Flutter 介面、七個來源、各站登入、原生播放器、影片與漫畫下載、書櫃合集、開啟密碼、App 內更新。
+- v1.0.1（2026-11-21）：第一版。手機／電視 Flutter 介面、七個來源、各站登入、原生播放器、影片與漫畫下載、書櫃合集、開啟密碼、App 內更新。（CI 因簽章 secret 編碼錯誤沒發布成功）
+- v1.0.2（2026-11-21）：加上電腦版（Windows）；修正 CI 簽章；手機版格狀列表封面尺寸、混合列高度的排版問題。
