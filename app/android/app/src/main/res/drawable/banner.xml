@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 電視桌面的橫幅（320×180）：黑底、左邊是圖示，右邊三條代表片單的長條 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#000000" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#E11D48"
+        android:pathData="M48,50h64a12,12 0,0 1,12 12v56a12,12 0,0 1,-12 12h-64a12,12 0,0 1,-12 -12v-56a12,12 0,0 1,12 -12z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M68,68L98,90L68,112Z" />
+    <path android:fillColor="#F8FAFC" android:pathData="M144,62h132a6,6 0,0 1,0 12h-132a6,6 0,0 1,0 -12z" />
+    <path android:fillColor="#94A3B8" android:pathData="M144,86h104a5,5 0,0 1,0 10h-104a5,5 0,0 1,0 -10z" />
+    <path android:fillColor="#94A3B8" android:fillAlpha="0.6" android:pathData="M144,106h80a5,5 0,0 1,0 10h-80a5,5 0,0 1,0 -10z" />
+</vector>

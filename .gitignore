@@ -1,0 +1,27 @@
+# 簽章金鑰（只在本機和 GitHub Secrets）
+keystore/
+*.jks
+keystore.properties
+
+# 建置產物
+build/
+dist/
+out/
+*.apk
+*.zip
+
+# Android / Gradle
+.gradle/
+local.properties
+*.iml
+.idea/
+.kotlin/
+
+# 電腦版
+node_modules/
+desktop/src/version.js
+desktop/downloads/
+desktop/backup/
+
+# 測試用的網頁存檔（裡面有網站名稱，不能進 repo）
+fixtures/

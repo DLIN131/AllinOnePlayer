@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- App 內更新下載的安裝檔 -->
+    <cache-path name="updates" path="updates/" />
+    <!-- 匯出的漫畫檔 -->
+    <external-files-path name="files" path="." />
+    <files-path name="internal" path="." />
+</paths>
