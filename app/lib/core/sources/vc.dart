@@ -220,6 +220,19 @@ class VcSource extends Source {
     );
   }
 
+  /// 預覽直接播（劇集播第一集），不用先開作品頁
+  @override
+  Future<Preview> preview(Item item) async {
+    var id = item.id;
+    try {
+      final d = await detail(item);
+      if (d.episodes.isNotEmpty) id = d.episodes.first.id;
+    } catch (_) {
+      // 劇集裡的單集沒有自己的作品頁：直接用它的編號
+    }
+    return Preview('hls', '$base/api/hls/$id', conn: const {'unwrap': true}, montage: true);
+  }
+
   @override
   Future<Stream> stream(Detail d, {Item? episode}) async {
     final id = episode?.id ?? d.item.id;

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/auth.dart';
@@ -13,6 +14,7 @@ import '../core/native.dart';
 import '../core/registry.dart';
 import '../core/sites.dart';
 import '../core/sources/comic_common.dart';
+import 'preview.dart';
 import 'theme.dart';
 
 void toast(BuildContext context, String msg) {
@@ -40,9 +42,41 @@ class Tap extends StatefulWidget {
 class _TapState extends State<Tap> {
   bool _focused = false;
 
+  /// 電視：按住 OK 鍵（遙控器會一直送重複的按鍵）＝長按；放開時沒到長按才算點一下
+  bool _okDown = false;
+  bool _longFired = false;
+
+  KeyEventResult _onKey(FocusNode _, KeyEvent e) {
+    if (widget.onLongPress == null) return KeyEventResult.ignored;
+    final k = e.logicalKey;
+    if (k != LogicalKeyboardKey.select && k != LogicalKeyboardKey.enter && k != LogicalKeyboardKey.numpadEnter && k != LogicalKeyboardKey.gameButtonA) {
+      return KeyEventResult.ignored;
+    }
+    if (e is KeyDownEvent) {
+      _okDown = true;
+      _longFired = false;
+    } else if (e is KeyRepeatEvent) {
+      if (_okDown && !_longFired) {
+        _longFired = true;
+        widget.onLongPress!();
+      }
+    } else if (e is KeyUpEvent) {
+      final tap = _okDown && !_longFired;
+      _okDown = false;
+      if (tap) widget.onTap?.call();
+    }
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = BorderRadius.circular(widget.radius);
+    final body = _build(r);
+    if (!Ui.tv || widget.onLongPress == null) return body;
+    return Focus(canRequestFocus: false, skipTraversal: true, onKeyEvent: _onKey, child: body);
+  }
+
+  Widget _build(BorderRadius r) {
     return Semantics(
       button: true,
       label: widget.semanticLabel,
@@ -146,7 +180,11 @@ class ItemCard extends StatelessWidget {
 
   /// 格狀列表裡統一比例（null = 依項目自己的封面方向）
   final bool? poster;
-  const ItemCard(this.item, {super.key, required this.onTap, this.onLongPress, this.width, this.showSource = false, this.progress = 0, this.autofocus = false, this.poster});
+
+  /// 影片長按是預覽；呼叫端原本的長按功能（onLongPress）變成預覽框裡的按鈕，這是按鈕上的字
+  final String? longPressLabel;
+  const ItemCard(this.item,
+      {super.key, required this.onTap, this.onLongPress, this.width, this.showSource = false, this.progress = 0, this.autofocus = false, this.poster, this.longPressLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +195,9 @@ class ItemCard extends StatelessWidget {
       width: w,
       child: Tap(
         onTap: onTap,
-        onLongPress: onLongPress,
+        onLongPress: canPreview(item)
+            ? () => showPreview(context, item, onOpen: onTap, action: onLongPress == null ? null : (longPressLabel ?? '更多', onLongPress!))
+            : onLongPress,
         autofocus: autofocus,
         semanticLabel: item.title,
         radius: Ui.radius,

@@ -190,6 +190,20 @@ class Stream {
   Map<String, Object?> get conn => {'headers': headers, 'cronet': cronet, 'unwrap': unwrap};
 }
 
+/// 長按封面的預覽要播什麼（靜音）
+class Preview {
+  final String kind;
+  final String url;
+  final Map<String, Object?> conn;
+
+  /// 播的是正片：在幾個時間點之間跳著播
+  final bool montage;
+
+  /// 這個播不了時改播的（例如預覽短片不存在 → 正片）
+  final Future<Preview> Function()? fallback;
+  const Preview(this.kind, this.url, {this.conn = const {}, this.montage = false, this.fallback});
+}
+
 /// 網站帳號狀態
 class AuthState {
   final bool loggedIn;

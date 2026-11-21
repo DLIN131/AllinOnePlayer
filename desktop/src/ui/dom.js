@@ -15,7 +15,7 @@ const ICONS = {
   globe: 57576, book: 57439, right: 57455, left: 57454, down: 57453, x: 57778, refresh: 57669, trash: 57742, pause: 57646, login: 57613,
   logout: 57614, list: 57809, lang: 57598, back: 57416, max: 57618, min: 57626, settings: 57684, folder: 57927, person: 57759,
   shield: 57855, alert: 57463, image: 57590, film: 57552, inbox: 57591, history: 57845, lock: 57611, check: 57452,
-  vertical: 58578, horizontal: 58575, swap: 58391, plus: 57661, external: 57529, next: 57696, volume: 57771,
+  vertical: 58578, horizontal: 58575, swap: 58391, plus: 57661, external: 57529, next: 57696, volume: 57771, mute: 57772,
 }
 
 /** h('div.class#id', { attrs, on: {click} }, ...children) */
@@ -147,11 +147,50 @@ export const badge = (site) => h('span.badge', { style: { borderColor: COLORS[si
 
 const LANG_SHORT = { zh: '中', en: 'EN', ja: '日' }
 
-export function card(it, onOpen, { showSource = false, progress = 0, onMenu } = {}) {
-  const img = h('img', { loading: 'lazy', alt: '', src: it.cover || '', on: { error: (e) => e.target.classList.add('broken') } })
+/** 長按封面的預覽（app.js 設定）：{ can(it), open(it, onOpen, action) } */
+export const hooks = { preview: null }
+const LONG_PRESS_MS = 450
+
+export function card(it, onOpen, { showSource = false, progress = 0, onMenu, menuLabel } = {}) {
+  const img = h('img', { loading: 'lazy', alt: '', src: it.cover || '', draggable: false, on: { error: (e) => e.target.classList.add('broken') } })
+  // 影片：按住滑鼠 0.45 秒＝預覽（放開後不算點擊）
+  const pv = hooks.preview?.can(it) ? hooks.preview : null
+  let pressTimer = null
+  let longFired = false
+  const cancelPress = () => {
+    clearTimeout(pressTimer)
+    pressTimer = null
+  }
   const el = h(
     `button.card${it.poster ? '.poster' : ''}`,
-    { type: 'button', title: it.title, on: { click: () => onOpen(it), contextmenu: (e) => onMenu && (e.preventDefault(), onMenu(it)) } },
+    {
+      type: 'button',
+      title: pv ? `${it.title}\n（按住封面可以預覽）` : it.title,
+      on: {
+        click: (e) => {
+          if (longFired) {
+            longFired = false
+            e.preventDefault()
+            return
+          }
+          onOpen(it)
+        },
+        contextmenu: (e) => onMenu && (e.preventDefault(), onMenu(it)),
+        mousedown: (e) => {
+          if (!pv || e.button !== 0) return
+          longFired = false
+          cancelPress()
+          pressTimer = setTimeout(() => {
+            pressTimer = null
+            longFired = true
+            pv.open(it, () => onOpen(it), onMenu ? [menuLabel || '更多', () => onMenu(it)] : null)
+          }, LONG_PRESS_MS)
+        },
+        mouseup: cancelPress,
+        mouseleave: cancelPress,
+        dragstart: (e) => e.preventDefault(),
+      },
+    },
     h(
       'div.thumb',
       img,

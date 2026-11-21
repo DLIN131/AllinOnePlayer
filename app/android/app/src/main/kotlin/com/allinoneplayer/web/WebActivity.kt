@@ -26,6 +26,9 @@ import androidx.activity.addCallback
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.allinoneplayer.Bridge
 import com.allinoneplayer.net.Net
 import com.allinoneplayer.net.Sites
@@ -68,6 +71,17 @@ class WebActivity : ComponentActivity() {
         const val VB_REMEMBER_JS =
             "(function(){[].slice.call(document.querySelectorAll('form')).forEach(function(f){" +
                 "if(f.querySelector('input[type=password]')&&!f.querySelector('[name=remember]')){var i=document.createElement('input');i.type='hidden';i.name='remember';i.value='on';f.appendChild(i)}})})();0"
+
+        /**
+         * Google 不讓 App 內嵌的網頁登入（顯示「這個瀏覽器或應用程式可能不安全」），它是用 Chrome 才有的特徵判斷的。
+         * 在 Google 的網頁改報 Firefox，加上拿掉 X-Requested-With 標頭，通常就能登入。
+         */
+        const val GOOGLE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
+        fun isGoogle(host: String?): Boolean {
+            val h = host?.lowercase() ?: return false
+            return h.startsWith("accounts.google.") || h == "accounts.youtube.com"
+        }
 
         /** 這些站網站那邊的登入一陣子沒動就失效，登入時問使用者要不要讓 App 記住密碼、過期時自動重新登入 */
         val CRED_SITES = setOf("jm")
@@ -115,13 +129,36 @@ class WebActivity : ComponentActivity() {
             settings.setSupportMultipleWindows(false)
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+                WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+            }
+            // Google 登入頁：UA 改報 Firefox，Chromium 才有的 navigator.userAgentData 也要藏起來（兩個要一致）
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                runCatching {
+                    WebViewCompat.addDocumentStartJavaScript(
+                        this,
+                        "Object.defineProperty(Navigator.prototype,'userAgentData',{get:function(){return undefined},configurable:true});",
+                        setOf("https://accounts.google.com", "https://accounts.youtube.com"),
+                    )
+                }
+            }
             webViewClient = object : WebViewClient() {
                 // 廣告會把頁面導到別的網站，只允許留在同一個站
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val u = request.url.toString()
                     if (!u.startsWith("http")) return true
                     val owner = Sites.siteForUrl(u)
-                    return owner != null && owner != site
+                    if (owner != null && owner != site) return true
+                    // Google 登入頁用 Firefox 的 UA，回到網站再換回原本的（網站的驗證 cookie 綁 UA）。換 UA 要重新載入才生效
+                    if (request.isForMainFrame) {
+                        val want = if (isGoogle(request.url.host)) GOOGLE_UA else Net.userAgent
+                        if (view.settings.userAgentString != want) {
+                            view.settings.userAgentString = want
+                            view.loadUrl(u)
+                            return true
+                        }
+                    }
+                    return false
                 }
 
                 override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
@@ -134,7 +171,7 @@ class WebActivity : ComponentActivity() {
                     if (site == "jm") view.evaluateJavascript(injectCss(JM_CSS), null)
                     CookieManager.getInstance().flush()
                     if (mode != "login") view.title?.takeIf { it.isNotBlank() }?.let { titleView.text = it }
-                    if (mode == "login") {
+                    if (mode == "login" && Sites.siteForUrl(url) == site) {
                         // 每個站的登入頁都預設勾「記住我／保持登入」：沒勾的話網站給的是關掉就失效的登入，重開 App 就要重登
                         view.evaluateJavascript(REMEMBER_JS, null)
                         if (site == "vb") view.evaluateJavascript(VB_REMEMBER_JS, null)

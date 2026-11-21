@@ -6,13 +6,16 @@ import { COLORS, COMIC_KEYS, MAIN_KEYS, src, VIDEO_KEYS } from './sources.js'
 import { Lang, Query, siteFavForm, siteFavSubmit } from './sources/comics.js'
 import { actressLink, CASTS, lookupActresses } from './sources/va.js'
 import { store } from './store.js'
-import { badge, btn, card, confirmDialog, dialog, emptyView, errorView, filterBar, h, icon, iconBtn, loading, pagedGrid, pick, promptDialog, shelf, toast } from './ui/dom.js'
+import { badge, btn, card, confirmDialog, dialog, emptyView, errorView, filterBar, h, hooks, icon, iconBtn, loading, pagedGrid, pick, promptDialog, shelf, toast } from './ui/dom.js'
+import { canPreview, openPreview } from './ui/preview.js'
 import { openPlayer } from './ui/player.js'
 import { openReader } from './ui/reader.js'
 
 const REPO = 'DLIN131/AllinOnePlayer'
 const ZIP_NAME = 'AllinOnePlayer-Windows.zip'
 const view = document.getElementById('view')
+// 影片封面按住＝預覽
+hooks.preview = { can: canPreview, open: openPreview }
 
 // ============ 導覽：每個分頁一個堆疊 ============
 

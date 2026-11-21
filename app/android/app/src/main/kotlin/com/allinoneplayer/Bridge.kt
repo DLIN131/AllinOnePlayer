@@ -15,6 +15,7 @@ import com.allinoneplayer.net.Sites
 import com.allinoneplayer.net.WebFetcher
 import com.allinoneplayer.player.Conn
 import com.allinoneplayer.player.PlayerActivity
+import com.allinoneplayer.player.PreviewPlayer
 import com.allinoneplayer.web.WebActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -59,6 +60,7 @@ object Bridge {
             }
         })
         MethodChannel(engine.dartExecutor.binaryMessenger, "aio/native").setMethodCallHandler { call, result -> handle(call, result) }
+        PreviewPlayer.attach(engine.renderer)
     }
 
     fun detach(act: Activity) {
@@ -118,6 +120,22 @@ object Bridge {
             "cookie" -> result.success(Net.cookie(a["url"] as String, a["name"] as String))
             "clearCookies" -> {
                 runCatching { Net.clearCookies(a["site"] as String) }
+                result.success(null)
+            }
+            "preview.start" -> try {
+                result.success(
+                    PreviewPlayer.start(
+                        a["kind"] as String,
+                        a["url"] as String,
+                        Conn.from((a["conn"] as? Map<String, Any?>).orEmpty()),
+                        a["montage"] == true,
+                    )
+                )
+            } catch (e: Exception) {
+                result.error("preview", e.message ?: e.toString(), null)
+            }
+            "preview.stop" -> {
+                PreviewPlayer.stop()
                 result.success(null)
             }
             "loginKeep" -> {

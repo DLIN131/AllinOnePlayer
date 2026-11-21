@@ -107,6 +107,8 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.1")
     implementation("androidx.core:core-ktx:1.16.0")
+    // 登入頁拿掉 X-Requested-With 標頭（Google 登入看到它就判定是 App 內嵌網頁而拒絕）
+    implementation("androidx.webkit:webkit:1.12.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

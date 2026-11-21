@@ -41,6 +41,10 @@
   - `Auth.startKeepAlive`：App 開著時每 10 分鐘、開 App / 回到前景時檢查 jm、vb（vb 的登入只有 2 小時）。
   - 網站 cookie 實測（電腦版）：vb `XSRF-TOKEN`、session 都是 2 小時；jm `AVS` 30 天但伺服器那邊會先過期。
 - `player/PlayerActivity.kt`：Media3，手機用內建控制列＋手勢層（放在 PlayerView 的 overlayFrameLayout，控制列在它上面，進度條才拖得動；連點兩下 10 秒、三下 1 分鐘、長按 2 倍速；控制列的倒退／快轉鍵也設成 10 秒），電視自己處理遙控器（左右快轉、長按 OK 2 倍速、上鍵選項）。結束回傳位置／是否要下一集。
+- `player/PreviewPlayer.kt`：長按封面的預覽。ExoPlayer 畫在 Flutter 的 SurfaceProducer（Dart 用 `Texture` 顯示），一律靜音，連線用 `Media.source`（跟正片同一套）。
+  `montage` = 播正片、在 10%～85% 之間每 5 秒跳一次。Dart：`Source.preview(item)`（預設 detail→stream 最低畫質；va 播封面資料夾的 `preview.mp4`，失敗改播正片；vc 劇集播第一集）、`ui/preview.dart` 預覽框。
+  `ItemCard`：影片長按＝預覽，呼叫端原本的長按功能（移除收藏等）變成預覽框的按鈕（`longPressLabel`）。電視：`Tap` 按住 OK（KeyRepeat）＝長按；預覽框在放開 OK 前不接受 OK，免得直接按到「開啟」。
+- Google 登入（WebActivity）：Google 擋 App 內嵌網頁。登入頁 `accounts.google.*` 改報 Firefox UA（換 UA 要 loadUrl 重載），拿掉 X-Requested-With（androidx.webkit），文件開頭腳本藏 `navigator.userAgentData`；回到網站換回原本 UA。
 - `download/`：影片下載（HLS 片段接成 .ts、MP4 續傳），前景服務，狀態用事件送 Dart。
 - Dart：`core/sources/*.dart` 各來源；`core/model.dart` 統一資料型別（Item / Detail / Section / FilterSpec / Link…）；
   `core/store.dart` 本機資料（state.json 原子寫入 + .bak）；`core/auth.dart` 各站登入狀態；`core/comic/` CBZ 讀寫、切條還原、漫畫下載、書櫃；
@@ -60,6 +64,8 @@
   被驗證擋就用隱藏視窗載入真的網頁，15 秒還在驗證頁就顯示給使用者點。`get(site, url, {api})`：網站 JSON API（XSRF、X-Requested-With、Origin）。
   影片：`registerMedia` 登記正在播放的影片要帶的標頭，播放期間頁面的影片／XHR 請求都補上（分段可能在別台主機），並把 CORS 改成允許（頁面是 file://）；
   下載在主程序直接帶標頭（`mediaFetch`）。`vh://` 協定代理有 PNG 包裝的串流。`registerSchemesAsPrivileged` 只能呼叫一次：vh 和 cbz 一起在 `fetcher.registerScheme`。
+- 長按預覽（`src/ui/preview.js`）：卡片按住滑鼠 0.45 秒（`dom.js` 的 `hooks.preview`），放開不算點擊；va 播 preview.mp4，其他播正片最低畫質跳著播，一律靜音。
+- Google 登入：各站 partition 對 `accounts.google.*` 改送 Firefox UA、拿掉 sec-ch-ua；登入視窗換網址時 `setUserAgent`，`login-preload.js` 藏 `navigator.userAgentData`（實測三者一致）。
 - IPC：`net:*`、`auth:*`（漫畫站開登入視窗；jm 可選擇讓程式記住密碼自動重登）、`cbz:*`（漫畫下載寫檔）、`vdl:*`（影片下載）、`lib:*`（書櫃）。
 - 頁面（`src/`，ES module，沒有框架）：`sources/*.js` 七個來源（格式跟 Dart 版相同）、`app.js` 左側選單＋頁面堆疊、`ui/player.js`（hls.js / <video>，鍵盤操作）、
   `ui/reader.js`（直向／翻頁、canvas 還原切條）、`comic-downloader.js`（逐張送主程序寫 CBZ）、`ui/dom.js` 元件。圖示是 Lucide 字型（跟手機版同一套）。
@@ -79,3 +85,4 @@
 - v1.0.2（2026-11-21）：加上電腦版（Windows）；修正 CI 簽章；手機版格狀列表封面尺寸、混合列高度的排版問題。
 - v1.0.3（2026-11-21）：手機播放器進度條拖不動（手勢層蓋在控制列上面）→ 改放 overlay；倒退／快轉都 10 秒（Media3 預設 5／15 秒）；連點三下 1 分鐘。漫畫往回捲反覆跳動：記住每頁寬高比、最近 16 張拼好的切條圖留著（ReaderPage0）。加 vb 網站登入（手機、電視、電腦）。電腦版：被驗證視窗載入的頁面回傳最後網址（之前看不出被轉到登入頁）；格狀列表出錯後不再自動一直重試。
 - v1.0.4（2026-11-21）：保持登入。手機／電視：備份並補回關 App 時被丟掉的登入 cookie、登入頁自動勾「記住我」（vb 補 remember 欄位）、jm 可加密記住密碼並在過期時背景自動重新登入、jm／vb 定期保持登入；「我的」頁可「忘記密碼」。電腦版：登入視窗各站都自動勾「記住我」、vb 也定期保持登入。測試改成完全不顯示視窗、全部靜音。
+- v1.0.5（2026-11-21）：長按影片封面預覽（手機長按、電視按住 OK、電腦按住滑鼠）：靜音，va 播網站的預覽短片，vb／vc 播正片最低畫質並每 5 秒往後跳；收藏、紀錄頁原本的長按功能變成預覽框裡的按鈕。H1 用 Google 登入被說「瀏覽器不安全」：Google 登入頁改報 Firefox 並拿掉內嵌網頁的特徵（手機、電腦）。

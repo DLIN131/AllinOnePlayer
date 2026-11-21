@@ -20,6 +20,16 @@ const SITES = {
 }
 
 let UA = ''
+/** Google 不讓內嵌瀏覽器登入（用 Chrome 才有的特徵判斷），在 Google 的登入頁改報 Firefox */
+const GOOGLE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0'
+const isGoogleLogin = (url) => {
+  try {
+    const h = new URL(url).hostname
+    return h.startsWith('accounts.google.') || h === 'accounts.youtube.com'
+  } catch {
+    return false
+  }
+}
 let overrides = {}
 const settingsFile = () => path.join(app.getPath('userData'), 'sites.json')
 
@@ -40,6 +50,12 @@ function init(ua) {
       cb({ cancel: fromWorker && ['image', 'media', 'font'].includes(details.resourceType) })
     })
     keepLoginCookies(site, ses)
+    // Google 登入頁：報 Firefox、拿掉 Chrome 才有的 client hints（不然會被判定是內嵌瀏覽器、說「可能不安全」）
+    ses.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*', 'https://accounts.youtube.com/*'] }, (d, cb) => {
+      d.requestHeaders['User-Agent'] = GOOGLE_UA
+      for (const k of Object.keys(d.requestHeaders)) if (/^sec-ch-ua/i.test(k)) delete d.requestHeaders[k]
+      cb({ requestHeaders: d.requestHeaders })
+    })
   }
   // jm 站的登入是記在網站伺服器上，大約 30 分鐘沒動作就會被登出（vb 是 2 小時）；程式開著時每 10 分鐘碰一下保持登入。
   // 電腦關機 / 重開機之後伺服器那邊早就過期了，cookie 還在也沒用 → 使用者同意記住密碼的話，開程式時自動重新登入
@@ -761,6 +777,9 @@ function setupProtocol() {
 }
 
 module.exports = {
+  GOOGLE_UA,
+  isGoogleLogin,
+  userAgent: () => UA,
   registerMedia,
   setupMedia,
   mediaFetch,

@@ -197,6 +197,14 @@ class VaSource extends Source {
     return m3u8.firstMatch(html)?.group(0);
   }
 
+  /// 網站每部片都有一段幾秒的預覽短片，跟封面放在同一個資料夾；沒有就播正片
+  @override
+  Future<Preview> preview(Item item) async {
+    final i = item.cover.lastIndexOf('/');
+    if (i <= 0) return super.preview(item);
+    return Preview('mp4', '${item.cover.substring(0, i)}/preview.mp4', conn: {'headers': {'Referer': '$base/'}}, fallback: () => super.preview(item));
+  }
+
   @override
   Future<Stream> stream(Detail d, {Item? episode}) async {
     final url = d.extra['playlist'] as String?;

@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+import 'model.dart' show Preview;
+
 /// 一次請求的結果；url 是轉址後的最後網址
 class Resp {
   final int status;
@@ -120,6 +122,12 @@ class Native {
   static Future<void> clearCookies(String site) => _ch.invokeMethod('clearCookies', {'site': site});
 
   static Future<void> resetWeb(String site) => _ch.invokeMethod('resetWeb', {'site': site});
+
+  /// 長按封面的預覽：回傳 Texture id；狀態走事件 {type: preview, id, state: ready|error}
+  static Future<int> previewStart(Preview p) async =>
+      ((await _ch.invokeMethod('preview.start', {'kind': p.kind, 'url': p.url, 'conn': p.conn, 'montage': p.montage})) as num).toInt();
+
+  static Future<void> previewStop() => _ch.invokeMethod('preview.stop');
 
   /// 登入確認成功：備份這個站的 cookie（重開 App 時補回被丟掉的登入 cookie）
   static Future<void> loginKeep(String site) => _ch.invokeMethod('loginKeep', {'site': site});

@@ -107,9 +107,17 @@ function openSiteWindow(site, url, { login = false } = {}) {
       title: login ? `登入 ${fetcher.label(site)}` : fetcher.label(site),
       autoHideMenuBar: true,
       backgroundColor: '#ffffff',
-      webPreferences: { partition: fetcher.partition(site), contextIsolation: true },
+      webPreferences: { partition: fetcher.partition(site), contextIsolation: true, preload: path.join(__dirname, 'login-preload.js') },
     })
     win.removeMenu()
+    // Google 登入頁改報 Firefox（網頁裡的 navigator.userAgent 也要一致），回到網站換回原本的（網站的驗證 cookie 綁 UA）
+    const pickUa = (u) => {
+      const want = fetcher.isGoogleLogin(u) ? fetcher.GOOGLE_UA : fetcher.userAgent()
+      if (win.webContents.getUserAgent() !== want) win.webContents.setUserAgent(want)
+    }
+    win.webContents.on('did-start-navigation', (d) => {
+      if (d.isMainFrame) pickUa(d.url)
+    })
     // 網站彈出的新視窗（廣告）一律擋掉，站內連結在同一個視窗開
     win.webContents.setWindowOpenHandler(({ url: u }) => {
       if (fetcher.siteForUrl(u) === site) win.loadURL(u)
@@ -135,6 +143,7 @@ function openSiteWindow(site, url, { login = false } = {}) {
       // 每個站的登入頁都預設勾「記住我／保持登入」：沒勾的話網站給的是關掉就失效的登入，重開程式就要重登。
       // 看名稱、id 或旁邊的字（論壇的叫 CookieDate）；用 click() 讓網站自己的程式也知道
       win.webContents.on('did-finish-load', () => {
+        if (fetcher.siteForUrl(win.webContents.getURL()) !== site) return
         win.webContents
           .executeJavaScript(
             `[...document.querySelectorAll('input[type=checkbox]')].forEach((c) => {

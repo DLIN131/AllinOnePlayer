@@ -21,10 +21,12 @@ class MainActivity : FlutterActivity() {
     override fun onStart() {
         super.onStart()
         WebFetcher.resume()
+        com.allinoneplayer.player.PreviewPlayer.resume()
     }
 
     override fun onStop() {
         super.onStop()
+        com.allinoneplayer.player.PreviewPlayer.pause()
         // 退到背景就可能被系統關掉：登入 cookie 先寫到硬碟、更新備份
         runCatching { com.allinoneplayer.net.LoginKeeper.saveKnown() }
         // 退到背景或進入播放器：暫停隱藏 WebView，太久沒回來就釋放。

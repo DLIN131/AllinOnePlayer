@@ -92,7 +92,7 @@ class _FavoritesState extends State<_Favorites> {
           Expanded(
             child: items.isEmpty
                 ? const EmptyView('還沒有收藏。在作品頁按「收藏」就會出現在這裡', icon: LucideIcons.heart)
-                : _Grid(items, onLongPress: (it) async {
+                : _Grid(items, longPressLabel: '移除收藏', onLongPress: (it) async {
                     if (await confirm(context, '移除收藏', it.title, ok: '移除')) Store.instance.setFavorite(it, false);
                   }),
           ),
@@ -104,7 +104,10 @@ class _Grid extends StatelessWidget {
   final List<Item> items;
   final void Function(Item)? onLongPress;
   final double Function(Item)? progressOf;
-  const _Grid(this.items, {this.onLongPress, this.progressOf});
+
+  /// 影片長按是預覽，onLongPress 變成預覽框裡的按鈕
+  final String? longPressLabel;
+  const _Grid(this.items, {this.onLongPress, this.progressOf, this.longPressLabel});
 
   /// 影片（橫式）和漫畫（直式）分開排，格子比例才會一致
   @override
@@ -143,6 +146,7 @@ class _Grid extends StatelessWidget {
               showSource: true,
               progress: progressOf?.call(list[i]) ?? 0,
               onTap: () => openItem(context, list[i]),
+              longPressLabel: longPressLabel,
               onLongPress: onLongPress == null ? null : () => onLongPress!(list[i])),
           childCount: list.length,
         ),
@@ -181,7 +185,7 @@ class _HistoryState extends State<_History> {
           Expanded(
             child: list.isEmpty
                 ? const EmptyView('還沒有紀錄', icon: LucideIcons.history)
-                : _Grid([for (final h in list) h.item], progressOf: (it) => list.firstWhere((h) => h.item.key == it.key).progress, onLongPress: (it) async {
+                : _Grid([for (final h in list) h.item], progressOf: (it) => list.firstWhere((h) => h.item.key == it.key).progress, longPressLabel: '刪除紀錄', onLongPress: (it) async {
                     if (await confirm(context, '刪除這筆紀錄', it.title, ok: '刪除')) Store.instance.removeHistory(it.key);
                   }),
           ),

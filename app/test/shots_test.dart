@@ -16,6 +16,7 @@ import 'package:allinoneplayer/ui/app.dart';
 import 'package:allinoneplayer/ui/pages/detail_page.dart';
 import 'package:allinoneplayer/ui/pages/library_page.dart';
 import 'package:allinoneplayer/ui/pages/sources_page.dart';
+import 'package:allinoneplayer/ui/preview.dart';
 import 'package:allinoneplayer/ui/theme.dart';
 import 'package:allinoneplayer/ui/widgets.dart';
 import 'package:flutter/material.dart';
@@ -61,8 +62,11 @@ void main() {
         final res = await req.close();
         return {'status': res.statusCode, 'url': a['url'], 'text': await res.transform(utf8.decoder).join()};
       });
+      if (call.method == 'preview.start') return 1;
       return null;
     });
+    // 預覽：原生播放器不存在，回傳假的畫面編號，事件管道接上空的
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockStreamHandler(const EventChannel('aio/events'), MockStreamHandler.inline(onListen: (_, __) {}));
     Directory(out).createSync(recursive: true);
   });
 
@@ -118,6 +122,7 @@ void main() {
     await shot(t, 'phone_detail_video', DetailPage(items[0]), tv: false);
     await shot(t, 'phone_detail_comic', DetailPage(items[4]), tv: false);
     await shot(t, 'phone_library', const Scaffold(body: SafeArea(child: LibraryPage())), tv: false, wait: const Duration(seconds: 1));
+    await shot(t, 'phone_preview', _PreviewHost(items[0]), tv: false, wait: const Duration(seconds: 4));
   }, skip: !enabled, timeout: const Timeout(Duration(minutes: 5)));
 
   testWidgets('電視：主畫面', (t) async {
@@ -131,5 +136,25 @@ void main() {
     await shot(t, 'tv_home', const Shell(), tv: true);
     await shot(t, 'tv_detail_video', DetailPage(items[0]), tv: true);
     await shot(t, 'tv_detail_comic', DetailPage(items[4]), tv: true);
+    await shot(t, 'tv_preview', _PreviewHost(items[0]), tv: true, wait: const Duration(seconds: 4));
   }, skip: !enabled, timeout: const Timeout(Duration(minutes: 5)));
+}
+
+/// 截圖用：一打開就跳出預覽框
+class _PreviewHost extends StatefulWidget {
+  final Item item;
+  const _PreviewHost(this.item);
+  @override
+  State<_PreviewHost> createState() => _PreviewHostState();
+}
+
+class _PreviewHostState extends State<_PreviewHost> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => showPreview(context, widget.item, onOpen: () {}, action: ('移除收藏', () {})));
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(body: SizedBox.expand());
 }

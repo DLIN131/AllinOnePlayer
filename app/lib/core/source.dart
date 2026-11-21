@@ -69,6 +69,14 @@ abstract class Source {
   /// 影片：播放來源；episode = 劇集裡的某一集
   Future<Stream> stream(Detail d, {Item? episode}) => throw UnimplementedError();
 
+  /// 長按封面的預覽：預設播正片（最低畫質、靜音），在幾個時間點之間跳著播
+  Future<Preview> preview(Item item) async {
+    final d = await detail(item);
+    final s = await stream(d);
+    final url = s.qualities.isNotEmpty ? s.qualities.last.$2 : s.url;
+    return Preview(s.kind, url, conn: s.conn, montage: true);
+  }
+
   /// 漫畫：閱讀頁的圖
   Future<List<ComicPage>> read(Detail d, String? chapterId) => throw UnimplementedError();
 
