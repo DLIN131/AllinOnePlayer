@@ -55,6 +55,23 @@ class WebActivity : ComponentActivity() {
             "#outsidenoticeModal,#shunt-modal,#billboard-modal,#bouns-popup,#guide-modal,#headelikes_modal,.modal-backdrop{display:none!important}" +
                 "body.modal-open{overflow:auto!important;padding-right:0!important}"
 
+        /** 勾選「記住我／保持登入」：看名稱、id 或旁邊的字（論壇的叫 CookieDate）；用 click() 讓網站自己的程式也知道 */
+        private const val REMEMBER_JS =
+            "(function(){[].slice.call(document.querySelectorAll('input[type=checkbox]')).forEach(function(c){" +
+                "var lb=(c.labels&&c.labels[0]&&c.labels[0].textContent)||'';var near=((c.parentElement&&c.parentElement.textContent)||'').slice(0,40);" +
+                "if(!c.checked&&/remember|cookiedate|keep|stay|persist|記住|保持登入|自動登入|下次/i.test(c.name+' '+c.id+' '+lb+' '+near))c.click()})})();0"
+
+        /**
+         * vb 的登入表單沒有「記住我」，網站給的登入只有 2 小時（一陣子沒用就要重登）。
+         * 網站的登入程式通常還是看 remember 這個欄位，補一個隱藏欄位；網站不理會也沒影響。
+         */
+        const val VB_REMEMBER_JS =
+            "(function(){[].slice.call(document.querySelectorAll('form')).forEach(function(f){" +
+                "if(f.querySelector('input[type=password]')&&!f.querySelector('[name=remember]')){var i=document.createElement('input');i.type='hidden';i.name='remember';i.value='on';f.appendChild(i)}})})();0"
+
+        /** 這些站網站那邊的登入一陣子沒動就失效，登入時問使用者要不要讓 App 記住密碼、過期時自動重新登入 */
+        val CRED_SITES = setOf("jm")
+
         @Volatile
         var current: WebActivity? = null
             private set
@@ -74,6 +91,7 @@ class WebActivity : ComponentActivity() {
     private var site = ""
     private var mode = "browse"
     private var typed = ""
+    private var typedPass = ""
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
@@ -116,8 +134,13 @@ class WebActivity : ComponentActivity() {
                     if (site == "jm") view.evaluateJavascript(injectCss(JM_CSS), null)
                     CookieManager.getInstance().flush()
                     if (mode != "login") view.title?.takeIf { it.isNotBlank() }?.let { titleView.text = it }
+                    if (mode == "login") {
+                        // 每個站的登入頁都預設勾「記住我／保持登入」：沒勾的話網站給的是關掉就失效的登入，重開 App 就要重登
+                        view.evaluateJavascript(REMEMBER_JS, null)
+                        if (site == "vb") view.evaluateJavascript(VB_REMEMBER_JS, null)
+                    }
                     if (site == "jm" && mode == "login" && url.contains("login", true)) {
-                        // 預設勾「記住我」，重新登入時先填好上次的帳號（只填帳號，不碰密碼）
+                        // 重新登入時先填好上次的帳號
                         view.evaluateJavascript(
                             "document.querySelectorAll('input[name=\"id_remember\"],input[name=\"login_remember\"]').forEach(function(c){c.checked=true});" +
                                 "document.querySelectorAll('input[name=\"username\"]').forEach(function(u){if(!u.value)u.value=${JSONObject.quote(prefill)}});0",
@@ -165,7 +188,7 @@ class WebActivity : ComponentActivity() {
         setContentView(root)
         onBackPressedDispatcher.addCallback(this) { onBack() }
 
-        if (site == "jm" && mode == "login") watchUsername()
+        if (site in CRED_SITES && mode == "login") watchUsername()
         web.loadUrl(url)
         web.requestFocus()
     }
@@ -189,7 +212,10 @@ class WebActivity : ComponentActivity() {
         setOnClickListener { onClick() }
     }
 
-    /** JM：記下使用者在「看得到的」帳號欄打的字（頁面上還有兩個藏在彈窗裡），收藏網址要用；不碰密碼 */
+    /**
+     * JM：記下使用者在「看得到的」帳號欄打的字（頁面上還有兩個藏在彈窗裡），收藏網址要用。
+     * 密碼也先放在記憶體：登入成功後 App 會問要不要記住（加密存在這台裝置），不同意就丟掉。
+     */
     private fun watchUsername() {
         lifecycleScope.launch {
             while (isActive) {
@@ -197,10 +223,12 @@ class WebActivity : ComponentActivity() {
                 web.evaluateJavascript(
                     "(function(){var all=[].slice.call(document.querySelectorAll('input[name=\"username\"]'));" +
                         "var seen=all.filter(function(u){return u.offsetParent!==null&&u.value.trim()});" +
-                        "return ((seen[0]||all.filter(function(u){return u.value.trim()})[0])||{}).value||''})()",
+                        "var u=seen[0]||all.filter(function(u){return u.value.trim()})[0];var p=u&&u.form&&u.form.querySelector('input[type=\"password\"]');" +
+                        "return JSON.stringify({u:(u||{}).value||'',p:(p||{}).value||''})})()",
                 ) { raw ->
-                    val v = runCatching { JSONObject("{\"v\":$raw}").optString("v") }.getOrDefault("")
-                    if (v.isNotBlank()) typed = v.trim()
+                    val v = runCatching { JSONObject(JSONObject("{\"v\":$raw}").optString("v")) }.getOrNull() ?: return@evaluateJavascript
+                    v.optString("u").takeIf { it.isNotBlank() }?.let { typed = it.trim() }
+                    v.optString("p").takeIf { it.isNotEmpty() }?.let { typedPass = it }
                 }
             }
         }
@@ -229,6 +257,7 @@ class WebActivity : ComponentActivity() {
         if (isFinishing) return
         CookieManager.getInstance().flush()
         if (site.isNotEmpty()) WebFetcher.reset(site)
+        if (mode == "login" && site in CRED_SITES) com.allinoneplayer.net.Creds.stash(site, typed, typedPass)
         setResult(Activity.RESULT_OK, Intent().putExtra(RESULT_TYPED, typed))
         finish()
     }

@@ -131,6 +131,27 @@ function openSiteWindow(site, url, { login = false } = {}) {
     let typed = ''
     let typedPass = ''
     let timer = null
+    if (login) {
+      // 每個站的登入頁都預設勾「記住我／保持登入」：沒勾的話網站給的是關掉就失效的登入，重開程式就要重登。
+      // 看名稱、id 或旁邊的字（論壇的叫 CookieDate）；用 click() 讓網站自己的程式也知道
+      win.webContents.on('did-finish-load', () => {
+        win.webContents
+          .executeJavaScript(
+            `[...document.querySelectorAll('input[type=checkbox]')].forEach((c) => {
+              const t = c.name + ' ' + c.id + ' ' + (c.labels?.[0]?.textContent || '') + ' ' + (c.parentElement?.textContent || '').slice(0, 40)
+              if (!c.checked && /remember|cookiedate|keep|stay|persist|記住|保持登入|自動登入|下次/i.test(t)) c.click()
+            });` +
+              // vb 的登入表單沒有「記住我」，網站給的登入只有 2 小時；網站的登入程式通常還是看 remember 欄位，補一個隱藏欄位（不理會也沒影響）
+              (site === 'vb'
+                ? `document.querySelectorAll('form').forEach((f) => {
+                    if (f.querySelector('input[type=password]') && !f.querySelector('[name=remember]')) f.append(Object.assign(document.createElement('input'), { type: 'hidden', name: 'remember', value: 'on' }))
+                  });`
+                : '') +
+              ' 0',
+          )
+          .catch(() => {})
+      })
+    }
     if (login && site === 'jm') {
       // 沒勾「記住我」的話，網站那邊的登入一陣子沒動就會失效（重開程式後收藏又變空的），所以預設幫忙勾起來
       win.webContents.on('did-finish-load', () => {

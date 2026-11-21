@@ -196,5 +196,14 @@ class AuthState {
   final String name;
   final String? error;
   final bool expired;
-  const AuthState(this.loggedIn, {this.name = '', this.error, this.expired = false});
+
+  /// 使用者讓 App 記住了密碼（登入失效時自動重新登入）
+  final bool remembered;
+
+  /// 剛剛登入成功，可以問使用者要不要記住密碼
+  final bool canRemember;
+  const AuthState(this.loggedIn, {this.name = '', this.error, this.expired = false, this.remembered = false, this.canRemember = false});
+
+  AuthState copyWith({bool? expired, bool? remembered, bool? canRemember, String? name}) => AuthState(loggedIn,
+      name: name ?? this.name, error: error, expired: expired ?? this.expired, remembered: remembered ?? this.remembered, canRemember: canRemember ?? this.canRemember);
 }

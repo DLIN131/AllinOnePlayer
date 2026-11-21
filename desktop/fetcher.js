@@ -41,10 +41,10 @@ function init(ua) {
     })
     keepLoginCookies(site, ses)
   }
-  // jm 站的登入是記在網站伺服器上，大約 30 分鐘沒動作就會被登出；程式開著時每 10 分鐘碰一下「我的」頁保持登入。
+  // jm 站的登入是記在網站伺服器上，大約 30 分鐘沒動作就會被登出（vb 是 2 小時）；程式開著時每 10 分鐘碰一下保持登入。
   // 電腦關機 / 重開機之後伺服器那邊早就過期了，cookie 還在也沒用 → 使用者同意記住密碼的話，開程式時自動重新登入
   setInterval(() => {
-    if (loadAccounts().jm?.seen) authStatus('jm').catch(() => {})
+    for (const s of ['jm', 'vb']) if (loadAccounts()[s]?.seen) authStatus(s).catch(() => {})
   }, 10 * 60 * 1000)
   setTimeout(() => {
     if (loadAccounts().jm?.seen && hasCred('jm')) authStatus('jm').catch(() => {})

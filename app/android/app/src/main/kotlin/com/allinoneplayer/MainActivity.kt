@@ -25,6 +25,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onStop() {
         super.onStop()
+        // 退到背景就可能被系統關掉：登入 cookie 先寫到硬碟、更新備份
+        runCatching { com.allinoneplayer.net.LoginKeeper.saveKnown() }
         // 退到背景或進入播放器：暫停隱藏 WebView，太久沒回來就釋放。
         // 開著登入／驗證網頁時不行：pauseTimers() 是整個 App 共用的，會連那個網頁的 JS 一起停掉
         if (com.allinoneplayer.web.WebActivity.current == null) WebFetcher.pause()

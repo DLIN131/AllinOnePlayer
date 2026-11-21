@@ -7,6 +7,8 @@ import android.os.Looper
 import androidx.core.content.FileProvider
 import com.allinoneplayer.download.VideoDownloads
 import com.allinoneplayer.net.BlockedException
+import com.allinoneplayer.net.Creds
+import com.allinoneplayer.net.LoginKeeper
 import com.allinoneplayer.net.Net
 import com.allinoneplayer.net.NetException
 import com.allinoneplayer.net.Sites
@@ -86,6 +88,8 @@ object Bridge {
                     Sites.Def(it["key"] as String, it["base"] as String, it["viaWeb"] == true)
                 }
                 Sites.configure(list)
+                // 上次關 App 時被丟掉的登入 cookie 補回來（要在任何請求之前）
+                runCatching { LoginKeeper.restore() }
                 result.success(null)
             }
             "fetch" -> scope.launch {
@@ -115,6 +119,32 @@ object Bridge {
             "clearCookies" -> {
                 runCatching { Net.clearCookies(a["site"] as String) }
                 result.success(null)
+            }
+            "loginKeep" -> {
+                runCatching { LoginKeeper.save(a["site"] as String) }
+                result.success(null)
+            }
+            "loginForget" -> {
+                LoginKeeper.forget(a["site"] as String)
+                result.success(null)
+            }
+            "credOffer" -> result.success(Creds.offer(a["site"] as String))
+            "credRemember" -> result.success(Creds.remember(a["site"] as String, a["yes"] == true))
+            "credHas" -> result.success(Creds.has(a["site"] as String))
+            "credForget" -> {
+                Creds.forget(a["site"] as String)
+                result.success(null)
+            }
+            "autoLogin" -> scope.launch {
+                val site = a["site"] as String
+                val c = Creds.read(site)
+                if (c == null) {
+                    result.success(false)
+                    return@launch
+                }
+                val ok = runCatching { WebFetcher.autoLogin(site, a["url"] as String, a["check"] as String, c.first, c.second) }.getOrDefault(false)
+                if (ok) runCatching { LoginKeeper.save(site) }
+                result.success(ok)
             }
             "resetWeb" -> {
                 WebFetcher.reset(a["site"] as String)

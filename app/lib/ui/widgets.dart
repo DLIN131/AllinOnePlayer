@@ -298,7 +298,7 @@ class ErrorView extends StatelessWidget {
       if (e is LoginError && e.site != 'va')
         FilledButton.icon(
           onPressed: () async {
-            await Auth.loginWeb(e.site);
+            await loginSite(context, e.site);
             onRetry();
           },
           icon: const Icon(LucideIcons.logIn),
@@ -428,6 +428,23 @@ Future<String?> pickOption(BuildContext context, String title, List<(String, Str
       ]),
     ),
   );
+}
+
+/// 開網站自己的登入頁；登入成功後（網站那邊登入會自己失效的站）問要不要讓 App 記住密碼
+Future<AuthState> loginSite(BuildContext context, String site) async {
+  final s = await Auth.loginWeb(site);
+  if (s.canRemember && context.mounted) {
+    final yes = await confirm(
+      context,
+      '記住密碼？',
+      '${Sites.label(site)} 網站那邊的登入一陣子沒用就會失效。讓 App 記住密碼的話，失效時會在背景自動重新登入，不用再自己登。\n\n'
+          '密碼用這台裝置的金鑰加密，只存在這台裝置；登出或在「我的」按「忘記密碼」就會刪掉。',
+      ok: '記住',
+    );
+    await Native.credRemember(site, yes);
+    return s.copyWith(remembered: yes, canRemember: false);
+  }
+  return s;
 }
 
 Future<bool> confirm(BuildContext context, String title, String body, {String ok = '確定', bool danger = false}) async {

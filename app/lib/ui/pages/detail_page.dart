@@ -357,7 +357,7 @@ class _DetailPageState extends State<DetailPage> {
       if (s.key == 'va') {
         toast(context, '請先到「我的」登入帳號');
       } else if (await confirm(context, '需要登入', e.message, ok: '登入')) {
-        await Auth.loginWeb(s.key);
+        await loginSite(context, s.key);
       }
     } on NetError catch (e) {
       if (mounted) toast(context, e.message);

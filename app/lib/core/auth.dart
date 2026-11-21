@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
+
 import 'model.dart';
 import 'native.dart';
 import 'sites.dart';
@@ -98,12 +100,94 @@ class Auth {
   /// 記住「這個站登入過」。之後變成沒登入（網站那邊的登入過期了）就回 expired，
   /// 畫面才能說「登入已過期，請重新登入」，而不是只顯示空的收藏。
   static Future<AuthState> status(String site) async {
-    final s = await _check(site);
-    if (s.loggedIn && _store.account(site)['seen'] != true) _store.updateAccount(site, (a) => a['seen'] = true);
+    var s = await _check(site);
+    final seen = _store.account(site)['seen'] == true;
+    final remembered = credSites.contains(site) && await _safe(() => Native.credHas(site), false);
+    // 網站那邊的登入過期了、使用者有讓 App 記住密碼 → 在背景自動重新登入一次
+    if (!s.loggedIn && s.error == null && seen && remembered && await _autoLogin(site)) s = await _check(site);
+    _lastCheck[site] = DateTime.now();
+    if (s.loggedIn) {
+      // 備份登入 cookie：重開 App 時補回被丟掉的那些
+      unawaited(_safe(() => Native.loginKeep(site), null));
+    } else if (s.error == null) {
+      unawaited(_safe(() => Native.loginForget(site), null));
+    }
+    if (s.loggedIn && !seen) _store.updateAccount(site, (a) => a['seen'] = true);
     if (s.loggedIn && s.name.isNotEmpty && site != 'jm' && accountName(site) != s.name) _store.updateAccount(site, (a) => a['name'] = s.name);
     if (site == 'jm' && s.loggedIn && s.name.isNotEmpty) JmSource.username = s.name;
-    if (!s.loggedIn && s.error == null && _store.account(site)['seen'] == true) return const AuthState(false, expired: true);
-    return s;
+    if (!s.loggedIn && s.error == null && seen) return AuthState(false, expired: true, remembered: remembered);
+    return s.copyWith(remembered: remembered);
+  }
+
+  static Future<T> _safe<T>(Future<T> Function() f, T fallback) async {
+    try {
+      return await f();
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  // ---------- 記住密碼、自動重新登入、保持登入 ----------
+
+  /// 網站那邊的登入一陣子沒動就會失效的站：登入時問要不要讓 App 記住密碼（加密存在這台裝置）
+  static const credSites = {'jm'};
+
+  /// 網站那邊一陣子沒動就登出的站：App 開著時定期碰一下（jm 約半小時、vb 2 小時）
+  static const keepSites = {'jm', 'vb'};
+
+  /// 要登入才看得到的頁面（自動登入後用來確認）
+  static String _checkUrl(String site) => switch (site) {
+        'jm' => '${Sites.base('jm')}/user/',
+        _ => '${Sites.base(site)}/',
+      };
+
+  static final _autoBusy = <String, Future<bool>>{};
+  static final _autoFailedAt = <String, DateTime>{};
+  static final _lastCheck = <String, DateTime>{};
+
+  /// 同一時間只跑一次；失敗後 5 分鐘內不再試（免得一直被網站擋）
+  static Future<bool> _autoLogin(String site) {
+    final busy = _autoBusy[site];
+    if (busy != null) return busy;
+    final failed = _autoFailedAt[site];
+    if (failed != null && DateTime.now().difference(failed) < const Duration(minutes: 5)) return Future.value(false);
+    final f = () async {
+      try {
+        final ok = await Native.autoLogin(site, Sites.loginUrl(site), _checkUrl(site));
+        if (!ok) _autoFailedAt[site] = DateTime.now();
+        return ok;
+      } catch (_) {
+        _autoFailedAt[site] = DateTime.now();
+        return false;
+      } finally {
+        _autoBusy.remove(site);
+      }
+    }();
+    _autoBusy[site] = f;
+    return f;
+  }
+
+  static Timer? _keepTimer;
+  static AppLifecycleListener? _life;
+
+  /// 保持登入：jm 這種網站那邊大約半小時沒動就登出的站，App 開著時每 10 分鐘碰一下；
+  /// 開 App、從背景回來超過 10 分鐘時也檢查一次（過期了、有記住密碼就自動重新登入）。
+  static void startKeepAlive() {
+    void touch() {
+      for (final site in keepSites) {
+        if (_store.account(site)['seen'] != true) continue;
+        final last = _lastCheck[site];
+        if (last != null && DateTime.now().difference(last) < const Duration(minutes: 9)) continue;
+        unawaited(status(site).then((_) {}, onError: (_) {}));
+      }
+    }
+
+    _keepTimer?.cancel();
+    _keepTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) touch();
+    });
+    _life ??= AppLifecycleListener(onResume: touch);
+    Timer(const Duration(seconds: 4), touch);
   }
 
   /// 漫畫站：開網站自己的登入頁。關閉後回傳登入狀態
@@ -123,13 +207,18 @@ class Auth {
     final typed = await Native.openWeb(site: site, url: Sites.loginUrl(site), mode: 'login', title: '登入 ${Sites.label(site)}', prefill: site == 'jm' ? lastLogin('jm') : '');
     await sub.cancel();
     await Native.resetWeb(site);
-    final s = await status(site);
+    var s = await status(site);
     if (s.loggedIn && typed.isNotEmpty) {
       _store.updateAccount(site, (a) => a['login'] = typed);
       if (s.name.isEmpty) setAccountName(site, typed);
     }
+    // 登入成功：已經記住過密碼的直接更新（可能換了密碼），不然讓畫面問使用者要不要記住
+    if (s.loggedIn && credSites.contains(site)) {
+      final ask = await _safe(() => Native.credOffer(site), false);
+      s = s.copyWith(canRemember: ask);
+    }
     changes.add(site);
-    return s.loggedIn && s.name.isEmpty && typed.isNotEmpty ? AuthState(true, name: typed) : s;
+    return s.loggedIn && s.name.isEmpty && typed.isNotEmpty ? s.copyWith(name: typed) : s;
   }
 
   /// va：App 內表單登入
@@ -156,6 +245,9 @@ class Auth {
       }
       await Native.clearCookies(site);
     }
+    // 自己登出：備份的登入 cookie、記住的密碼都刪掉
+    await _safe(() => Native.loginForget(site), null);
+    await _safe(() => Native.credForget(site), null);
     // 自己登出的就不算「過期」，帳號名稱也一起清掉；只留下次登入要預先填的帳號
     final login = _store.account(site)['login'] as String? ?? '';
     _store.setAccount(site, login.isNotEmpty ? {'login': login} : null);

@@ -180,6 +180,56 @@ object WebFetcher {
         }
     }
 
+    // ---------- 自動重新登入（使用者讓 App 記住密碼的站） ----------
+
+    private val LOGIN_PAGE = Regex("/login(?:[/?#]|$)", RegexOption.IGNORE_CASE)
+
+    /**
+     * 在隱藏 WebView 打開登入頁，填好帳密、勾「記住我」、按登入；之後每 2 秒抓一次 checkUrl（要登入才看得到的頁面），
+     * 沒被轉到登入頁就是成功。頁面上可能有好幾個登入表單（藏在彈窗裡），填看得到的那一個。
+     */
+    suspend fun autoLogin(site: String, loginUrl: String, checkUrl: String, user: String, pass: String): Boolean = lock(site).withLock {
+        ready.remove(site)
+        try {
+            load(site, loginUrl) ?: return@withLock false
+            val fill = """
+                (function(){
+                  var forms=[].slice.call(document.querySelectorAll('form')).filter(function(f){return f.querySelector('input[type="password"]')});
+                  var f=forms.filter(function(x){return x.querySelector('input[type="password"]').offsetParent!==null})[0]||forms[0];
+                  if(!f)return false;
+                  var u=f.querySelector('input[name="username"],input[name="UserName"],input[name="login"],input[name="email"],input[type="email"],input[type="text"]');
+                  var p=f.querySelector('input[type="password"]');
+                  if(!u)return false;
+                  u.value=${JSONObject.quote(user)}; p.value=${JSONObject.quote(pass)};
+                  [u,p].forEach(function(el){el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))});
+                  f.querySelectorAll('input[type="checkbox"]').forEach(function(c){if(/remember|cookiedate/i.test(c.name+' '+c.id))c.checked=true});
+                  var b=f.querySelector('.login_submit,button[name="submit_login"],[type="submit"]');
+                  if(b)b.click();else f.submit();
+                  return true;
+                })()
+            """.trimIndent()
+            var filled = false
+            for (i in 0 until 6) {
+                filled = withContext(Dispatchers.Main) { webView(site).eval(fill) } == "true"
+                if (filled) break
+                delay(2500)
+            }
+            if (!filled) return@withLock false
+            for (i in 0 until 10) {
+                delay(2000)
+                val r = runCatching { withTimeoutOrNull(8000) { jsFetch(site, checkUrl, "{credentials: 'include'}") } }.getOrNull() ?: continue
+                if (r.status in 200..399 && !LOGIN_PAGE.containsMatchIn(r.url) && !Regex("<title>\\s*Login\\b", RegexOption.IGNORE_CASE).containsMatchIn(r.text)) {
+                    CookieManager.getInstance().flush()
+                    return@withLock true
+                }
+            }
+            false
+        } finally {
+            withContext(Dispatchers.Main) { runCatching { webView(site).loadUrl("about:blank") } }
+            ready.remove(site)
+        }
+    }
+
     private suspend fun jsFetch(site: String, url: String, init: String): Resp {
         val id = seq.incrementAndGet()
         val result = CompletableDeferred<Resp>()

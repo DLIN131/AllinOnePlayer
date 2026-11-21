@@ -40,6 +40,12 @@ object Sites {
 
     fun host(site: String) = base(site).substringAfter("://").substringBefore('/')
 
+    /** 這個站的 cookie 可能放在哪些網址（主機本身、根網域、www；eh 的帳號在論壇子網域） */
+    fun urls(site: String): List<String> {
+        val root = rootDomain(host(site))
+        return listOfNotNull(base(site), "https://$root", "https://www.$root", if (site == "eh") "https://forums.$root" else null).distinct()
+    }
+
     /** 取網域最後兩段，例如 cdn.example.com → example.com */
     fun rootDomain(host: String) = host.split('.').takeLast(2).joinToString(".")
 
@@ -186,8 +192,7 @@ object Net {
     fun clearCookies(site: String) {
         val cm = CookieManager.getInstance()
         val root = Sites.rootDomain(Sites.host(site))
-        val urls = listOf(Sites.base(site), "https://$root", "https://www.$root", "https://forums.$root")
-        for (u in urls) {
+        for (u in Sites.urls(site)) {
             val names = cm.getCookie(u)?.split(';')?.map { it.trim().substringBefore('=') }.orEmpty()
             for (n in names) {
                 cm.setCookie(u, "$n=; Max-Age=0; Path=/")
@@ -195,6 +200,7 @@ object Net {
             }
         }
         cm.flush()
+        LoginKeeper.forget(site)
         WebFetcher.reset(site)
     }
 }

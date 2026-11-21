@@ -121,6 +121,25 @@ class Native {
 
   static Future<void> resetWeb(String site) => _ch.invokeMethod('resetWeb', {'site': site});
 
+  /// 登入確認成功：備份這個站的 cookie（重開 App 時補回被丟掉的登入 cookie）
+  static Future<void> loginKeep(String site) => _ch.invokeMethod('loginKeep', {'site': site});
+
+  /// 網站那邊真的過期了：不要再補舊的 cookie
+  static Future<void> loginForget(String site) => _ch.invokeMethod('loginForget', {'site': site});
+
+  /// 登入頁剛打的密碼要不要問使用者記住（已經記住過的會直接更新、回傳 false）
+  static Future<bool> credOffer(String site) async => await _ch.invokeMethod('credOffer', {'site': site}) == true;
+
+  static Future<bool> credRemember(String site, bool yes) async => await _ch.invokeMethod('credRemember', {'site': site, 'yes': yes}) == true;
+
+  static Future<bool> credHas(String site) async => await _ch.invokeMethod('credHas', {'site': site}) == true;
+
+  static Future<void> credForget(String site) => _ch.invokeMethod('credForget', {'site': site});
+
+  /// 用記住的密碼在隱藏網頁重新登入；check 是要登入才看得到的頁面
+  static Future<bool> autoLogin(String site, String url, String check) async =>
+      await _ch.invokeMethod('autoLogin', {'site': site, 'url': url, 'check': check}) == true;
+
   /// 開看得到的網頁（login / verify / browse），關閉後回傳登入頁上打的帳號（只有 JM 會記）
   static Future<String> openWeb({required String site, required String url, required String mode, String title = '', String prefill = ''}) async {
     final r = await _ch.invokeMethod('openWeb', {'site': site, 'url': url, 'mode': mode, 'title': title, 'prefill': prefill}) as Map?;

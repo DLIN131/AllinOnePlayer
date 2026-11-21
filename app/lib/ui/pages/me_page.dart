@@ -51,7 +51,10 @@ class _MePageState extends State<MePage> {
       SectionHeader('網站帳號', trailing: IconButton(tooltip: '重新檢查', icon: const Icon(LucideIcons.refreshCw), onPressed: _refresh)),
       Padding(
         padding: EdgeInsets.symmetric(horizontal: Ui.gutter),
-        child: Text('登入都是在網站自己的登入頁（或網站的登入表單）完成，App 只記帳號名稱，不會存密碼。', style: TextStyle(color: C.mutedFg, fontSize: Ui.small - 1, height: 1.5)),
+        child: Text(
+            '登入都是在網站自己的登入頁（或網站的登入表單）完成，重開 App 也會保持登入。'
+            '${Sites.label('jm')} 網站那邊的登入一陣子沒用就會失效，可以選擇讓 App 加密記住密碼、失效時自動重新登入；其他站不會存密碼。',
+            style: TextStyle(color: C.mutedFg, fontSize: Ui.small - 1, height: 1.5)),
       ),
       for (final k in accountSites) _account(k),
       SectionHeader('設定'),
@@ -142,6 +145,15 @@ class _MePageState extends State<MePage> {
                 icon: const Icon(LucideIcons.logOut),
                 label: const Text('登出'),
               ),
+            if (s?.remembered == true)
+              OutlinedButton(
+                onPressed: () async {
+                  if (!await confirm(context, '忘記密碼', '刪掉 App 記住的 $label 密碼？之後登入失效就要自己重新登入。', ok: '刪掉')) return;
+                  await Native.credForget(k);
+                  _refresh(k);
+                },
+                child: const Text('忘記密碼'),
+              ),
             if (k == 'jm' && logged)
               OutlinedButton(
                 onPressed: () async {
@@ -185,7 +197,7 @@ class _MePageState extends State<MePage> {
       }
       return;
     }
-    final s = await Auth.loginWeb(k);
+    final s = await loginSite(context, k);
     if (!mounted) return;
     setState(() => status[k] = s);
     toast(context, s.loggedIn ? '${Sites.label(k)} 已登入${s.name.isNotEmpty ? '：${s.name}' : ''}' : '${Sites.label(k)} 尚未登入');

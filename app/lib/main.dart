@@ -24,6 +24,7 @@ Future<void> main() async {
   await Native.configure(Sites.nativeConfig());
 
   Auth.init();
+  Auth.startKeepAlive();
   ComicDownloads.instance.load();
   if (!Ui.tv) VideoDownloads.instance.init();
 

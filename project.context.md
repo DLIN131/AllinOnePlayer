@@ -32,6 +32,14 @@
   UA 一律「電腦版 Chrome」（版本同裝置 WebView），因為 Cloudflare 的通行 cookie 綁 UA。
 - `web/WebActivity.kt`：看得到的網頁（登入／驗證／瀏覽），每次載完頁面送事件給 Dart，Dart 確認登入成功後關掉。
   注意 `pauseTimers()` 是全 App 共用：開著這頁時 MainActivity 不能暫停 WebFetcher。
+  登入頁一律自動勾「記住我／保持登入」（`REMEMBER_JS`：看 name / id / 旁邊的字）；vb 表單沒有這個選項，補隱藏欄位 `remember=on`。
+- **保持登入**（`net/LoginKeeper.kt` + `core/auth.dart`）：
+  - `LoginKeeper`：WebView 關 App 就丟掉工作階段 cookie → 登入確認成功時備份該站 cookie（SharedPreferences `login_keep`），
+    開 App（`configure`）時把備份裡有、現在不見的補回去（30 天到期）；退到背景時更新備份；確認沒登入或登出就刪備份。
+  - `Creds`（只有 jm，`Auth.credSites`）：網站那邊約半小時沒動就登出。登入頁記下帳密（只在記憶體），登入成功後問使用者要不要記住，
+    同意才用 Android Keystore AES-GCM 加密存（`login_cred`）。`Auth.status` 發現過期 → `WebFetcher.autoLogin` 用隱藏 WebView 填表送出，抓 `/user/` 確認。失敗 5 分鐘內不重試。
+  - `Auth.startKeepAlive`：App 開著時每 10 分鐘、開 App / 回到前景時檢查 jm、vb（vb 的登入只有 2 小時）。
+  - 網站 cookie 實測（電腦版）：vb `XSRF-TOKEN`、session 都是 2 小時；jm `AVS` 30 天但伺服器那邊會先過期。
 - `player/PlayerActivity.kt`：Media3，手機用內建控制列＋手勢層（放在 PlayerView 的 overlayFrameLayout，控制列在它上面，進度條才拖得動；連點兩下 10 秒、三下 1 分鐘、長按 2 倍速；控制列的倒退／快轉鍵也設成 10 秒），電視自己處理遙控器（左右快轉、長按 OK 2 倍速、上鍵選項）。結束回傳位置／是否要下一集。
 - `download/`：影片下載（HLS 片段接成 .ts、MP4 續傳），前景服務，狀態用事件送 Dart。
 - Dart：`core/sources/*.dart` 各來源；`core/model.dart` 統一資料型別（Item / Detail / Section / FilterSpec / Link…）；
@@ -47,6 +55,8 @@
 - 主程序以 ComicHub 電腦版為底（`state.js` 紀錄檔＋備份、`watchdog.js` 黑畫面自救、`updater.js` original-fs 更新、`library.js` 書櫃 cbz://、`backup.js`、`paths.js` 資料放 exe 旁），
   加上 MPlayer 電腦版的影片下載（`video-downloads.js`：HLS 片段 → ffmpeg 轉 MP4、MP4 續傳）和 VidHub 的 PNG 拆包協定。
 - `fetcher.js`：每站一個 partition（`persist:<代號>`），一律用 Chromium（`session.fetch`；Node 的 https 會被 CDN 依 TLS 指紋擋）。
+  保持登入：`keepLoginCookies` 把工作階段 cookie 改成 30 天到期（實測重開後還在）、cookie 變動 2 秒內寫硬碟；
+  jm、vb 程式開著每 10 分鐘碰一下；jm 可記住密碼（DPAPI）過期自動重登；登入視窗跟手機版一樣自動勾「記住我」、vb 補 `remember=on`。
   被驗證擋就用隱藏視窗載入真的網頁，15 秒還在驗證頁就顯示給使用者點。`get(site, url, {api})`：網站 JSON API（XSRF、X-Requested-With、Origin）。
   影片：`registerMedia` 登記正在播放的影片要帶的標頭，播放期間頁面的影片／XHR 請求都補上（分段可能在別台主機），並把 CORS 改成允許（頁面是 file://）；
   下載在主程序直接帶標頭（`mediaFetch`）。`vh://` 協定代理有 PNG 包裝的串流。`registerSchemesAsPrivileged` 只能呼叫一次：vh 和 cbz 一起在 `fetcher.registerScheme`。
@@ -61,10 +71,11 @@
 - `LIVE=1 flutter test test/live_test.dart`：連真的網站測 vc / nh / wn / eh（有 Cloudflare 的站一般 HTTP 連不上，不在這裡測）。
 - `SHOTS=1 FONT=<中文字型> OUT=<資料夾> flutter test test/shots_test.dart`：用真資料把主要畫面畫成 PNG（手機 411×891、電視 960×540）。
 - Android：`flutter build apk --flavor phone|tv --release`。
-- 電腦版：scratchpad 的 Electron 測試程式（`AIO_TEST=1` 不顯示視窗，移到畫面外截圖，userData/downloads 用暫存資料夾），用真的網站測首頁、作品頁、三站播放、四站閱讀、影片與漫畫下載。不要開打包後的 exe 測試。
+- 電腦版：scratchpad 的 Electron 測試程式（`AIO_TEST=1`；**任何視窗都不能出現在螢幕上、全部靜音**：擋掉 show/showInactive/focus、`web-contents-created` 時 `setAudioMuted(true)`、截圖用 `capturePage(undefined, { stayHidden: true })`，userData/downloads 用暫存資料夾），用真的網站測首頁、作品頁、三站播放、四站閱讀、影片與漫畫下載。不要開打包後的 exe 測試。
 
 ## 版本紀錄
 
 - v1.0.1（2026-11-21）：第一版。手機／電視 Flutter 介面、七個來源、各站登入、原生播放器、影片與漫畫下載、書櫃合集、開啟密碼、App 內更新。（CI 因簽章 secret 編碼錯誤沒發布成功）
 - v1.0.2（2026-11-21）：加上電腦版（Windows）；修正 CI 簽章；手機版格狀列表封面尺寸、混合列高度的排版問題。
 - v1.0.3（2026-11-21）：手機播放器進度條拖不動（手勢層蓋在控制列上面）→ 改放 overlay；倒退／快轉都 10 秒（Media3 預設 5／15 秒）；連點三下 1 分鐘。漫畫往回捲反覆跳動：記住每頁寬高比、最近 16 張拼好的切條圖留著（ReaderPage0）。加 vb 網站登入（手機、電視、電腦）。電腦版：被驗證視窗載入的頁面回傳最後網址（之前看不出被轉到登入頁）；格狀列表出錯後不再自動一直重試。
+- v1.0.4（2026-11-21）：保持登入。手機／電視：備份並補回關 App 時被丟掉的登入 cookie、登入頁自動勾「記住我」（vb 補 remember 欄位）、jm 可加密記住密碼並在過期時背景自動重新登入、jm／vb 定期保持登入；「我的」頁可「忘記密碼」。電腦版：登入視窗各站都自動勾「記住我」、vb 也定期保持登入。測試改成完全不顯示視窗、全部靜音。
