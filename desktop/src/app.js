@@ -585,7 +585,7 @@ function libraryPage() {
 
 function siteFavorites() {
   const el = h('div', loading())
-  const sites = ['va', 'nh', 'jm', 'wn', 'eh']
+  const sites = ['va', 'vb', 'nh', 'jm', 'wn', 'eh']
   Promise.all(sites.map((k) => window.hub.authStatus(k).then((s) => [k, s]).catch(() => [k, { loggedIn: false }]))).then((all) => {
     const logged = all.filter(([, s]) => s.loggedIn || s.expired)
     if (!logged.length) return el.replaceChildren(emptyView('還沒有登入任何網站。到「我的」登入後，網站帳號的收藏會出現在這裡', 'bookmark'))
@@ -787,7 +787,7 @@ async function collectionMenu(c, rerender) {
 function mePage() {
   const el = h('div.page')
   const accounts = h('div.accounts')
-  const sites = ['va', 'nh', 'jm', 'wn', 'eh']
+  const sites = ['va', 'vb', 'nh', 'jm', 'wn', 'eh']
   const renderAccounts = () => {
     accounts.replaceChildren(...sites.map(accountCard))
   }

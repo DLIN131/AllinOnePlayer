@@ -262,7 +262,8 @@ class _DetailPageState extends State<DetailPage> {
         icon: Icon(LucideIcons.heart, color: fav ? C.accent : null),
         label: Text(fav ? '已收藏' : '收藏'),
       ));
-      if (s.hasAccount && Auth.accountName(s.key).isNotEmpty || (s.isComic && s.hasAccount)) {
+      // 網站收藏按鈕：va（登入後）和漫畫站；vb 的清單要在網站上管理
+      if ((s.key == 'va' && Auth.accountName('va').isNotEmpty) || (s.isComic && s.hasAccount)) {
         buttons.add(OutlinedButton.icon(onPressed: () => _siteFav(d), icon: const Icon(LucideIcons.bookmark), label: Text(s.key == 'va' && siteSaved == true ? '已在網站收藏' : '網站收藏')));
       }
       if (!Ui.tv) buttons.add(OutlinedButton.icon(onPressed: () => _download(d), icon: const Icon(LucideIcons.download), label: const Text('下載')));

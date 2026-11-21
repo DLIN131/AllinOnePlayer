@@ -85,6 +85,7 @@ class _ReaderPageState extends State<ReaderPage> {
   void dispose() {
     _save();
     _saveTimer?.cancel();
+    ReaderPage0.clearAll();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     scroll.dispose();
     pager?.dispose();
@@ -307,7 +308,8 @@ class _ReaderPageState extends State<ReaderPage> {
     return CustomScrollView(
       controller: scroll,
       center: centerKey,
-      cacheExtent: MediaQuery.of(context).size.height * 1.5,
+      // 前後各多留幾頁不拆掉，往回捲時不用重新載入
+      cacheExtent: MediaQuery.of(context).size.height * 3,
       slivers: [
         SliverList(delegate: SliverChildBuilderDelegate((c, i) => page(start - 1 - i), childCount: start)),
         SliverList(key: centerKey, delegate: SliverChildBuilderDelegate((c, i) => page(start + i), childCount: pages.length - start)),
@@ -433,7 +435,39 @@ class _ReaderPageState extends State<ReaderPage> {
 class ReaderPage0 {
   final ComicPage p;
   String? resolved;
+
+  /// 圖片真正的寬高比（載過一次就記住）：頁面重建時佔位高度就對了，往回捲不會因為高度變來變去而跳動
+  double? ratio;
+
+  /// 拼回去的圖（切條打亂的頁才有）：重組很花時間，最近看過的留著，往回捲直接顯示
+  ui.Image? image;
+
   ReaderPage0(this.p);
+
+  static final _recent = <ReaderPage0>[];
+  static const _keep = 16;
+
+  void remember(ui.Image img) {
+    image?.dispose();
+    image = img;
+    _recent
+      ..remove(this)
+      ..add(this);
+    while (_recent.length > _keep) {
+      final old = _recent.removeAt(0);
+      old.image?.dispose();
+      old.image = null;
+    }
+  }
+
+  /// 離開閱讀器時把留著的圖都放掉
+  static void clearAll() {
+    for (final p in _recent) {
+      p.image?.dispose();
+      p.image = null;
+    }
+    _recent.clear();
+  }
 }
 
 class _PageImage extends StatefulWidget {
@@ -468,7 +502,13 @@ class _PageImageState extends State<_PageImage> {
   }
 
   Future<void> _start() async {
-    setState(() => _error = null);
+    // 最近看過、已經拼好的圖：直接用（自己拿一份 clone，快取那份由 ReaderPage0 管）
+    final cached = widget.page.image;
+    if (cached != null) {
+      _img = cached.clone();
+      return;
+    }
+    if (mounted) setState(() => _error = null);
     try {
       final p = widget.page.p;
       ImageProvider provider;
@@ -486,8 +526,16 @@ class _PageImageState extends State<_PageImage> {
       final stream = provider.resolve(createLocalImageConfiguration(context));
       _listener = ImageStreamListener((info, _) async {
         final src = info.image;
+        widget.page.ratio = src.width / src.height;
         widget.onSize(widget.index, src.width / src.height);
-        final out = p.segs > 0 ? await descrambleImage(src, p.segs) : src.clone();
+        ui.Image out;
+        if (p.segs > 0) {
+          final whole = await descrambleImage(src, p.segs);
+          widget.page.remember(whole);
+          out = whole.clone();
+        } else {
+          out = src.clone();
+        }
         info.dispose();
         if (!mounted) {
           out.dispose();
@@ -523,7 +571,7 @@ class _PageImageState extends State<_PageImage> {
     if (_img != null) {
       return RawImage(image: _img, fit: widget.fit, width: widget.fit == BoxFit.fitWidth ? w : null, filterQuality: FilterQuality.medium);
     }
-    final ratio = (p.width > 0 && p.height > 0) ? p.width / p.height : 1 / 1.45;
+    final ratio = widget.page.ratio ?? ((p.width > 0 && p.height > 0) ? p.width / p.height : 1 / 1.45);
     return SizedBox(
       width: w,
       height: widget.fit == BoxFit.fitWidth ? w / ratio : null,

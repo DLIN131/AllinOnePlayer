@@ -1,5 +1,5 @@
 // vb：網站沒有 API，全部從 HTML 解析（有 Cloudflare）。影片是直連 MP4（多畫質），要帶 Referer。
-import { abs, base, enc, NetError, parse, text, txt } from '../net.js'
+import { abs, base, enc, label, LoginError, NetError, parse, raw, text, txt } from '../net.js'
 
 const b64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s), (c) => c.charCodeAt(0)))
 // 類型名稱要跟網站的查詢參數完全一致（Base64 存放）
@@ -50,6 +50,16 @@ function cards(links) {
   return [...out.values()].filter((v) => v.cover || v.title)
 }
 
+/** 要登入的頁面：沒登入網站會轉到 /login */
+async function accountList(path, page) {
+  const r = await raw(K, `${path}${path.includes('?') ? '&' : '?'}page=${page}`)
+  if (/\/login(?:[/?#]|$)/.test(r.url || '') || /<form[^>]+action="[^"]*\/login"[\s\S]{0,3000}name="password"/.test(r.data || '')) throw new LoginError(K, `還沒登入 ${label(K)}`)
+  if (!r.ok) throw new NetError(r.error, r.status)
+  const d = parse(r.data)
+  const items = cards(d.querySelectorAll('a[href*="watch?v="]'))
+  return { items, hasMore: items.length > 0 && !!d.querySelector(`a[href*="page=${page + 1}"]`) }
+}
+
 async function listUrl(url, page) {
   const d = parse(await text(K, `${url}${url.includes('?') ? '&' : '?'}page=${page}`))
   const items = cards(d.querySelectorAll('a[href*="watch?v="]'))
@@ -59,7 +69,7 @@ async function listUrl(url, page) {
 export const vb = {
   key: K,
   kind: 'video',
-  hasAccount: false,
+  hasAccount: true,
   sections: [
     { id: 'home', title: '首頁', shelves: true },
     {
@@ -70,6 +80,8 @@ export const vb = {
         { key: 'sort', label: '排序', options: SORTS.map((s) => [s, s]) },
       ],
     },
+    { id: 'subs', title: '訂閱內容' },
+    { id: 'lists', title: '我的清單' },
   ],
   searchFilters: [
     { key: 'genre', label: '類型', options: [['', '全部'], ...GENRES.map((g) => [g, g])] },
@@ -95,7 +107,8 @@ export const vb = {
     return out
   },
 
-  list: (p, page) => listUrl(p.url || searchUrl({ genre: p.genre || '', sort: p.sort || SORTS[0] }), page),
+  favorites: (page) => accountList('/playlists', page),
+  list: (p, page) => (p.section === 'subs' ? accountList('/subscriptions', page) : p.section === 'lists' || p.section === 'fav' ? accountList('/playlists', page) : listUrl(p.url || searchUrl({ genre: p.genre || '', sort: p.sort || SORTS[0] }), page)),
   search: (q, page, p = {}) => listUrl(searchUrl({ query: q, genre: p.genre || '', sort: p.sort || '' }), page),
 
   async detail(item) {

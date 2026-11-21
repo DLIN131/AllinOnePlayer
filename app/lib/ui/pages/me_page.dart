@@ -27,7 +27,7 @@ class _MePageState extends State<MePage> {
   final status = <String, AuthState?>{};
   bool checking = false;
 
-  static const accountSites = ['va', 'nh', 'jm', 'wn', 'eh'];
+  static const accountSites = ['va', 'vb', 'nh', 'jm', 'wn', 'eh'];
 
   @override
   void initState() {

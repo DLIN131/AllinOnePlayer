@@ -227,10 +227,13 @@ export function pagedGrid(load, onOpen, { showSource = false, emptyText = '沒�
   let busy = false
   let gen = 0
   let count = 0
+  // 出錯後停下來等使用者按「重試」（不然捲到底的偵測、補滿畫面會一直自動重試，錯誤畫面一直被轉圈蓋掉）
+  let failed = false
   const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && next())
   io.observe(foot)
-  async function next() {
-    if (busy || !more) return
+  async function next(retry = false) {
+    if (busy || !more || (failed && !retry)) return
+    failed = false
     busy = true
     const my = gen
     foot.replaceChildren(loading())
@@ -250,15 +253,17 @@ export function pagedGrid(load, onOpen, { showSource = false, emptyText = '沒�
       if (grid.children.length && grid.querySelectorAll('.card.poster').length > grid.children.length / 2) grid.classList.add('posters')
     } catch (e) {
       if (my !== gen) return
-      foot.replaceChildren(errorView(e, () => next(), { compact: count > 0, onLogin }))
+      failed = true
+      foot.replaceChildren(errorView(e, () => next(true), { compact: count > 0, onLogin: onLogin ? async (site) => (await onLogin(site), next(true)) : null }))
     } finally {
       if (my === gen) busy = false
     }
     // 第一頁太少填不滿畫面時繼續載
-    if (more && foot.getBoundingClientRect().top < window.innerHeight + 400) setTimeout(next, 50)
+    if (!failed && more && foot.getBoundingClientRect().top < window.innerHeight + 400) setTimeout(next, 50)
   }
   const reload = () => {
     gen++
+    failed = false
     busy = false
     page = 0
     more = true

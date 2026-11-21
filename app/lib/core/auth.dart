@@ -7,6 +7,7 @@ import 'sites.dart';
 import 'source.dart';
 import 'sources/jm.dart';
 import 'sources/va.dart';
+import 'sources/vb.dart';
 import 'store.dart';
 
 /// 各站登入狀態、帳號名稱。
@@ -66,6 +67,12 @@ class Auth {
           if (r.url.contains('users-login.html') || !RegExp(r'users-logout|退出|登出').hasMatch(r.text)) return const AuthState(false);
           final m = RegExp(r'歡迎[：:,，\s]*(?:<[^>]+>)*\s*([^<\s]+)').firstMatch(r.text) ?? RegExp(r'class="[^"]*user_name[^"]*"[^>]*>\s*([^<]+)').firstMatch(r.text);
           return AuthState(true, name: m?.group(1)?.trim() ?? '');
+        case 'vb':
+          // 要登入的頁面：沒登入會被轉到 /login
+          final r = await Http.fetch('vb', '/playlists');
+          if (VbSource.isLoginPage(r.url, r.text)) return const AuthState(false);
+          if (!r.ok) return AuthState(false, error: Http.errorText(r));
+          return const AuthState(true);
         case 'eh':
           // 登入後論壇會在整個網域寫 ipb_member_id / ipb_pass_hash
           final id = await Native.cookie(Sites.base('eh'), 'ipb_member_id');

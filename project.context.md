@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | va | 影片 | HTML，有 Cloudflare → 隱藏 WebView | HLS；網址藏在 p,a,c,k,e,d 打包的 JS；CDN 要 Referer+Origin，Cronet 優先，403 重試，BucketPunish = 網站端壞掉 | 網站 JSON API：`POST /api/login`、`/saved` `/history`、`/api/items/<id>/save|view`、`DELETE /api/history`（WebView 內送，帶 XSRF） |
 | vx | （va 附屬） | 番號查女優的另一個站，一般 HTTP | — | — |
-| vb | 影片 | HTML，有 Cloudflare | 直連 MP4 多畫質，要 Referer；壞了自動降畫質 | 無 |
+| vb | 影片 | HTML，有 Cloudflare | 直連 MP4 多畫質，要 Referer；壞了自動降畫質 | 網站登入頁（有 reCAPTCHA，只能在 WebView 登入）；`/subscriptions`（訂閱內容）、`/playlists`（我的清單）沒登入會轉到 /login。清單頁的實際格式沒用真帳號驗證過 |
 | vc | 影片／劇集 | 頁面內嵌 SSR 資料（`Tsr` 解析，不執行 JS），一般 HTTP | HLS，清單與片段包在 PNG 裡（自訂區塊 0x726f5564，旗標 bit0 = zlib）→ 原生 `UnwrapDataSource` | 無 |
 | nh | 漫畫 | 官方 v2 API | 圖片直連 | `access_token` cookie → `Authorization: User`；401 時 `POST /auth/refresh` |
 | jm | 漫畫 | HTML，有 Cloudflare | 圖片切條倒置：段數 = md5(aid+檔名) 規則（`JmSource.segments`），閱讀時畫布還原、下載時 isolate 還原存 JPEG | 網站登入頁；收藏網址要帳號名稱（登入頁讀「看得到的」帳號欄）；同帳號只能一處登入 |
@@ -32,7 +32,7 @@
   UA 一律「電腦版 Chrome」（版本同裝置 WebView），因為 Cloudflare 的通行 cookie 綁 UA。
 - `web/WebActivity.kt`：看得到的網頁（登入／驗證／瀏覽），每次載完頁面送事件給 Dart，Dart 確認登入成功後關掉。
   注意 `pauseTimers()` 是全 App 共用：開著這頁時 MainActivity 不能暫停 WebFetcher。
-- `player/PlayerActivity.kt`：Media3，手機用內建控制列＋手勢（雙擊快轉、長按 2 倍速），電視自己處理遙控器（左右快轉、長按 OK 2 倍速、上鍵選項）。結束回傳位置／是否要下一集。
+- `player/PlayerActivity.kt`：Media3，手機用內建控制列＋手勢層（放在 PlayerView 的 overlayFrameLayout，控制列在它上面，進度條才拖得動；連點兩下 10 秒、三下 1 分鐘、長按 2 倍速；控制列的倒退／快轉鍵也設成 10 秒），電視自己處理遙控器（左右快轉、長按 OK 2 倍速、上鍵選項）。結束回傳位置／是否要下一集。
 - `download/`：影片下載（HLS 片段接成 .ts、MP4 續傳），前景服務，狀態用事件送 Dart。
 - Dart：`core/sources/*.dart` 各來源；`core/model.dart` 統一資料型別（Item / Detail / Section / FilterSpec / Link…）；
   `core/store.dart` 本機資料（state.json 原子寫入 + .bak）；`core/auth.dart` 各站登入狀態；`core/comic/` CBZ 讀寫、切條還原、漫畫下載、書櫃；
@@ -67,3 +67,4 @@
 
 - v1.0.1（2026-11-21）：第一版。手機／電視 Flutter 介面、七個來源、各站登入、原生播放器、影片與漫畫下載、書櫃合集、開啟密碼、App 內更新。（CI 因簽章 secret 編碼錯誤沒發布成功）
 - v1.0.2（2026-11-21）：加上電腦版（Windows）；修正 CI 簽章；手機版格狀列表封面尺寸、混合列高度的排版問題。
+- v1.0.3（2026-11-21）：手機播放器進度條拖不動（手勢層蓋在控制列上面）→ 改放 overlay；倒退／快轉都 10 秒（Media3 預設 5／15 秒）；連點三下 1 分鐘。漫畫往回捲反覆跳動：記住每頁寬高比、最近 16 張拼好的切條圖留著（ReaderPage0）。加 vb 網站登入（手機、電視、電腦）。電腦版：被驗證視窗載入的頁面回傳最後網址（之前看不出被轉到登入頁）；格狀列表出錯後不再自動一直重試。

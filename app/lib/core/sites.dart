@@ -32,7 +32,7 @@ class Sites {
   static const defs = <SiteDef>[
     // 影片
     SiteDef('va', '=MPlayer', 'aHR0cHM6Ly9taXNzYXYud3M=', Kind.video, viaWeb: true, color: 0xFFE11D48),
-    SiteDef('vb', '=H1', 'aHR0cHM6Ly9oYW5pbWUxLm1l', Kind.video, viaWeb: true, color: 0xFFF472B6),
+    SiteDef('vb', '=H1', 'aHR0cHM6Ly9oYW5pbWUxLm1l', Kind.video, viaWeb: true, login: '/login', color: 0xFFF472B6),
     SiteDef('vc', '=VidHub', 'aHR0cHM6Ly9yb3V2YjEueHl6', Kind.video, color: 0xFF38BDF8),
     // 漫畫
     SiteDef('nh', 'bmhlbnRhaQ==', 'aHR0cHM6Ly9uaGVudGFpLm5ldA==', Kind.comic, login: '/login/', prefix: '#', color: 0xFFED2553),

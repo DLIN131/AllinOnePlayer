@@ -197,7 +197,12 @@ class PlayerActivity : ComponentActivity() {
         }.orEmpty().ifEmpty { listOf(Quality("", url)) }
         qualityIndex = qualities.indexOfFirst { it.url == url }.coerceAtLeast(0)
 
-        player = ExoPlayer.Builder(this).setLoadControl(Media.loadControl()).build().also { it.addListener(listener) }
+        // 控制列的倒退／快轉鍵預設是 5 秒／15 秒，統一成 10 秒（跟雙擊一樣）
+        player = ExoPlayer.Builder(this)
+            .setLoadControl(Media.loadControl())
+            .setSeekBackIncrementMs(SEEK_STEP_MS)
+            .setSeekForwardIncrementMs(SEEK_STEP_MS)
+            .build().also { it.addListener(listener) }
 
         playerView = PlayerView(this).apply {
             player = this@PlayerActivity.player
@@ -229,7 +234,8 @@ class PlayerActivity : ComponentActivity() {
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
             addView(playerView)
-            if (!tv) addView(gestureLayer(), FrameLayout.LayoutParams(-1, -1))
+            // 手勢層放在 PlayerView 的 overlay（影片之上、控制列之下）：控制列出現時進度條、按鈕照常可以拖、可以按
+            if (!tv) playerView.overlayFrameLayout?.addView(gestureLayer(), FrameLayout.LayoutParams(-1, -1))
             addView(tvOverlay, FrameLayout.LayoutParams(-1, -1))
             addView(phoneBar, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
             addView(hint, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(72) })
@@ -300,33 +306,74 @@ class PlayerActivity : ComponentActivity() {
         requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
 
-    /** 雙擊左右半邊 = 倒退／快轉；長按 = 2 倍速（放開恢復）；單擊交給 PlayerView 顯示／隱藏控制列 */
+    /**
+     * 左右半邊連點：點兩下 = 倒退／快轉 10 秒，點三下 = 1 分鐘（再多點一下多 10 秒）；
+     * 長按 = 2 倍速（放開恢復）；單擊 = 顯示／隱藏控制列。
+     */
     @SuppressLint("ClickableViewAccessibility")
     private fun gestureLayer(): View {
         val layer = View(this)
-        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent) = true
+        val main = android.os.Handler(mainLooper)
+        val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+        val tapGap = 300L
+        var taps = 0
+        var lastUp = 0L
+        var lastForward = true
+        var downX = 0f
+        var downY = 0f
+        var moved = false
+        val singleTap = Runnable {
+            if (playerView.isControllerFullyVisible) playerView.hideController() else playerView.showController()
+        }
+        val longPress = Runnable { startBoost() }
 
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (playerView.isControllerFullyVisible) playerView.hideController() else playerView.showController()
-                return true
-            }
+        fun seek(ms: Long, text: String) {
+            val dur = player.duration.takeIf { it != C.TIME_UNSET } ?: Long.MAX_VALUE
+            player.seekTo((player.currentPosition + ms).coerceIn(0, dur))
+            showHint(text)
+        }
 
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val forward = e.x > layer.width / 2f
-                val dur = player.duration.takeIf { it != C.TIME_UNSET } ?: Long.MAX_VALUE
-                player.seekTo((player.currentPosition + if (forward) SEEK_STEP_MS else -SEEK_STEP_MS).coerceIn(0, dur))
-                showHint(if (forward) "快轉 10 秒" else "倒退 10 秒")
-                return true
-            }
-
-            override fun onLongPress(e: MotionEvent) {
-                startBoost()
-            }
-        })
         layer.setOnTouchListener { _, ev ->
-            detector.onTouchEvent(ev)
-            if ((ev.action == MotionEvent.ACTION_UP || ev.action == MotionEvent.ACTION_CANCEL) && boosting) stopBoost()
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.x
+                    downY = ev.y
+                    moved = false
+                    main.postDelayed(longPress, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                }
+                MotionEvent.ACTION_MOVE -> if (!moved && (Math.abs(ev.x - downX) > slop || Math.abs(ev.y - downY) > slop)) {
+                    moved = true
+                    main.removeCallbacks(longPress)
+                }
+                MotionEvent.ACTION_UP -> {
+                    main.removeCallbacks(longPress)
+                    when {
+                        boosting -> stopBoost()
+                        moved -> {}
+                        else -> {
+                            val now = SystemClock.uptimeMillis()
+                            val forward = ev.x > layer.width / 2f
+                            taps = if (now - lastUp < tapGap && forward == lastForward) taps + 1 else 1
+                            lastUp = now
+                            lastForward = forward
+                            val sign = if (forward) 1 else -1
+                            val word = if (forward) "快轉" else "倒退"
+                            main.removeCallbacks(singleTap)
+                            when (taps) {
+                                1 -> main.postDelayed(singleTap, tapGap)
+                                2 -> seek(sign * SEEK_STEP_MS, "$word 10 秒")
+                                // 第三下：再補 50 秒，合計 1 分鐘
+                                3 -> seek(sign * 50_000L, "$word 1 分鐘")
+                                else -> seek(sign * SEEK_STEP_MS, "再$word 10 秒")
+                            }
+                        }
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    main.removeCallbacks(longPress)
+                    if (boosting) stopBoost()
+                }
+            }
             true
         }
         return layer

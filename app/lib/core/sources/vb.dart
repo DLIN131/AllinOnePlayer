@@ -2,6 +2,7 @@ import 'package:html/dom.dart' as dom;
 
 import '../model.dart';
 import '../native.dart';
+import '../sites.dart';
 import '../source.dart';
 import '../util.dart';
 
@@ -20,7 +21,29 @@ class VbSource extends Source {
           FilterSpec('genre', '類型', [('', '全部'), for (final g in genres) (g, g)]),
           FilterSpec('sort', '排序', [for (final s in sorts) (s, s)]),
         ]),
+        const Section('subs', '訂閱內容'),
+        const Section('lists', '我的清單'),
       ];
+
+  @override
+  bool get hasAccount => true;
+
+  /// 要登入的頁面：沒登入網站會轉到 /login
+  Future<PageResult> accountList(String path, int page) async {
+    final r = await Http.fetch(key, '$path${path.contains('?') ? '&' : '?'}page=$page');
+    if (isLoginPage(r.url, r.text)) throw LoginError(key, '還沒登入 ${Sites.label(key)}');
+    if (!r.ok) throw NetError(Http.errorText(r), r.status);
+    final d = parseHtml(r.text);
+    final items = parseCards(d.querySelectorAll('a[href*="watch?v="]'));
+    return PageResult(items, items.isNotEmpty && d.querySelector('a[href*="page=${page + 1}"]') != null);
+  }
+
+  /// 被轉到登入頁（網址是 /login，或頁面上是登入表單）
+  static bool isLoginPage(String url, String html) =>
+      RegExp(r'/login(?:[/?#]|$)').hasMatch(url) || RegExp(r'<form[^>]+action="[^"]*/login"[\s\S]{0,3000}name="password"').hasMatch(html);
+
+  @override
+  Future<PageResult> favorites(int page) => accountList('/playlists', page);
 
   @override
   List<FilterSpec> get searchFilters => [
@@ -62,6 +85,8 @@ class VbSource extends Source {
 
   @override
   Future<PageResult> list(Map<String, String> params, int page) async {
+    if (params['section'] == 'subs') return accountList('/subscriptions', page);
+    if (params['section'] == 'lists' || params['section'] == 'fav') return accountList('/playlists', page);
     final url = params['url'] ?? searchUrl(genre: params['genre'] ?? '', sort: params['sort'] ?? sorts.first);
     return _list(url, page);
   }

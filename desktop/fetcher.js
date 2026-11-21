@@ -10,7 +10,7 @@ const path = require('path')
 const b64 = (s) => Buffer.from(s, 'base64').toString('utf8')
 const SITES = {
   va: { label: 'MPlayer', base: b64('aHR0cHM6Ly9taXNzYXYud3M='), login: null, prefix: '' },
-  vb: { label: 'H1', base: b64('aHR0cHM6Ly9oYW5pbWUxLm1l'), login: null, prefix: '' },
+  vb: { label: 'H1', base: b64('aHR0cHM6Ly9oYW5pbWUxLm1l'), login: '/login', prefix: '' },
   vc: { label: 'VidHub', base: b64('aHR0cHM6Ly9yb3V2YjEueHl6'), login: null, prefix: '' },
   vx: { label: 'lookup', base: b64('aHR0cHM6Ly9hdi13aWtpLm5ldA=='), login: null, prefix: '' },
   nh: { label: b64('bmhlbnRhaQ=='), base: b64('aHR0cHM6Ly9uaGVudGFpLm5ldA=='), login: '/login/', prefix: '#' },
@@ -173,6 +173,8 @@ app.on('before-quit', () => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+const lastWindowUrl = {}
+
 /** 用隱藏視窗載入網頁拿 HTML。15 秒還在驗證頁就把視窗顯示出來讓使用者手動點驗證 */
 function loadViaWindow(site, url) {
   const run = async () => {
@@ -188,7 +190,7 @@ function loadViaWindow(site, url) {
       let info
       try {
         info = await w.webContents.executeJavaScript(
-          '({ title: document.title, ready: document.readyState, html: document.documentElement.outerHTML })',
+          '({ title: document.title, ready: document.readyState, html: document.documentElement.outerHTML, url: location.href })',
         )
       } catch {
         continue
@@ -198,6 +200,8 @@ function loadViaWindow(site, url) {
         if (w.isVisible()) w.hide()
         // 網頁會一直跑廣告腳本，拿到內容就換成空白頁
         w.loadURL('about:blank').catch(() => {})
+        // 記下最後的網址（被轉到登入頁之類的要看得出來）
+        lastWindowUrl[site] = info.url
         return info.html
       }
       if (challenged && Date.now() - start > 15000 && !w.isVisible()) w.show()
@@ -275,7 +279,7 @@ async function get(site, url, opts = {}) {
         return { ok: r.status >= 200 && r.status < 300, status: r.status, data: r.text, url: r.url }
       }
       const html = await loadViaWindow(site, full)
-      return { ok: true, status: 200, data: opts.json ? JSON.parse(html) : html, url: full }
+      return { ok: true, status: 200, data: opts.json ? JSON.parse(html) : html, url: lastWindowUrl[site] || full }
     }
     // API 呼叫：4xx 也把內容交給頁面判斷（401 = 沒登入、422 = 帳密錯誤）
     if (opts.api) {
@@ -333,6 +337,14 @@ async function checkAuth(site) {
     if (!r.ok) return { loggedIn: false, error: r.error }
     const who = vaEmail(r.data)
     return who ? { loggedIn: true, name: who } : { loggedIn: false }
+  }
+  if (site === 'vb') {
+    // 要登入的頁面：沒登入會被轉到 /login
+    const r = await get('vb', '/playlists')
+    if (!r.ok) return { loggedIn: false, error: r.error }
+    // 被轉到登入頁：網址是 /login，或頁面上是登入表單
+    const loginPage = /\/login(?:[/?#]|$)/.test(r.url || '') || /<form[^>]+action="[^"]*\/login"[\s\S]{0,3000}name="password"/.test(r.data)
+    return loginPage ? { loggedIn: false } : { loggedIn: true, name: '' }
   }
   if (site === 'nh') {
     if (!(await nhToken()) && !(await nhRefresh())) return { loggedIn: false }
